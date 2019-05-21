@@ -1,5 +1,6 @@
 if CASTLE_PREFETCH then
   CASTLE_PREFETCH({
+    "https://raw.githubusercontent.com/castle-games/share.lua/master/cs.lua",
     "nnetwork.lua",
     "game.lua",
     "object.lua",
