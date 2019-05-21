@@ -1,5 +1,10 @@
 if CASTLE_PREFETCH then
   CASTLE_PREFETCH({
+    "nnetwork.lua",
+    "game.lua",
+    "object.lua",
+    "anim.lua",
+    "sugarcoat/sugarcoat.lua",
     "assets/sheet.png",
 --    "assets/jump.wav",
 --    "assets/snake.wav"
