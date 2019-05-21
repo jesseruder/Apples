@@ -552,8 +552,8 @@ end
 function load_assets()
   load_png("spritesheet", "assets/sheet.png", nil, true)
   
-  load_sfx("assets/jump.wav", "jump", 1)
-  load_sfx("assets/snake.wav", "snek", 0.5)
+--  load_sfx("assets/jump.wav", "jump", 1)
+--  load_sfx("assets/snake.wav", "snek", 0.5)
 end
 
 function load_colors()
