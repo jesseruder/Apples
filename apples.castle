@@ -1,0 +1,14 @@
+---
+main: client.lua
+title: Apples
+owner: trasevol-dog
+primaryColor: 10d275
+coverImage: thumbnail.png
+dimensions: full
+multiplayer:
+  enabled: true
+  serverMain: server.lua
+description: |
+ Avoid Sneks!
+ 
+ Use WASD, arrow keys, controller left-stick, D-pad, and/or mouse click to move around.
