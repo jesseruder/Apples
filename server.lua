@@ -19,7 +19,7 @@ end
 
 function server.update()
   if ROLE then server.preupdate() end
-
+  
   _update()
   
   if ROLE then server.postupdate() end

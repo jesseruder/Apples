@@ -158,3 +158,36 @@ end
 
 love.quit = quit
 events.quit = quit
+
+
+if castle then
+  local canvas
+  function network.paused()
+    canvas = love.graphics.getCanvas()
+    love.graphics.setCanvas()
+  end
+  
+  function network.resumed()
+    love.graphics.setCanvas(canvas)
+  end
+end
+
+
+if SUGAR_SERVER_MODE then
+  local forbid = {
+    "gfx",
+    "audio",
+    "input"
+  }
+  
+  for _, k in pairs(forbid) do
+    for name, foo in pairs(sugar[k]) do
+      sugar[k][name] = function(...)
+        sugar.debug.w_log("Using forbidden "..k.." function '"..name.."'.")
+        foo(...)
+      end
+      
+      sugar.S[name] = sugar[k][name]
+    end
+  end
+end

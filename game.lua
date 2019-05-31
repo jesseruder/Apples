@@ -3,27 +3,73 @@ require("nnetwork")
 require("anim")
 require("object")
 
+-- NOTES:
+
+--- post with shot of before death, with everyone's names
+--- title-screen -> don't start game directly, can let people join first
+
+
+--? make snake steer away from walls + other sneks
+--?- ^ checking too far?
+
+--- add other way to kill snakes?? (pick-ups???) (bombs!)
+
+--+ difficulty progression
+
+--- game over (+ restart ??)
+--- credits go on the gameover
+--- restart = vote [4/6] -> restart in {countdown}
+
+--- anim for apple mouthful going through snek body
+
+--- sfx
+---- apple bounce  ^
+---- snake ssss    ^
+---- snake dies    .
+---- snake dies 2  .
+---- apple dies    .
+---- apple rebirth .
+---- select button .
+---- press button  .
+
+--- music???
+
+
+BOARD_WN = 32
+BOARD_HN = 18
+
 apples = {}
 snakes = {}
+dead_snakes = {}
+
+level = 0
+
+bomb_t = 1
 
 local body_colors = {}
 local apple_colors = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 local drk = {[0]=0, 0, 1, 2, 3, 4, 7, 8, 9, 0, 15, 10, 13, 14, 10, 0}
+local lit = {[0]=15, 2, 3, 4, 5, 5, 5, 6, 7, 8, 11, 5, 5, 12, 13, 14}
+local nrm = {[0]=0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
 local shkx, shky = 0, 0
+
+local title_surf
 
 -- CORE
 
 function _init()
   init_object_mgr(
     "apples",
-    "snakes"
+    "snakes",
+    "bombs"
   )
-
+  
   load_anims()
   
   init_network()
 
   if not IS_SERVER then
+    title_surf = new_surface(9*8, 16, "title")
     load_colors()
   end
   
@@ -46,11 +92,22 @@ end
 function init_game()
   if IS_SERVER then
     --create_snake(nil, 64, 64, 32)
+    bomb_t = 1
   else
     init_board()
   end
   
+  level = 0
+  
 --  create_apple(64,64)
+
+--  add_playerui({color = 1})
+--  add_playerui({color = 1})
+--  add_playerui({color = 1})
+--  add_playerui({color = 1})
+--  add_playerui({color = 1})
+--  add_playerui({color = 1})
+--  add_playerui({color = 1})
 end
 
 function update_game()
@@ -61,20 +118,27 @@ function update_game()
   end
 
   update_objects()
+  
+  if not IS_SERVER then
+    update_topbar()
+  end
 end
 
 function draw_game()
   palt(0, false)
-  palt(11, false)
   
   camera()
+  apply_shake()
   
   cls()
 --  for id, apple in pairs(apples) do
 --    
 --  end
-  
-  camera(shkx, shky)
+
+  camera(0, -16)
+  apply_shake()
+  palt(0, false)
+  palt(11, false)
   
   draw_board()
   
@@ -82,8 +146,12 @@ function draw_game()
   
   draw_objects()
   
+  
   camera()
   
+  draw_topbar()
+  
+  palt(11, false)
   draw_cursor()
 end
 
@@ -97,23 +165,31 @@ function update_apple(s)
   local acc = dt() * 15 * 30
   
   if s.id == my_id then
+    local movx, movy = 0,0
+  
     if btn(4) or btn(5) then
-      s.vx = s.vx + btnv(4) * acc
-      s.vy = s.vy + btnv(5) * acc
+      movx = movx + btnv(4)
+      movy = movy + btnv(5)
     end
     
     if btn(8) then
-      local mx, my = btnv(6), btnv(7)
-      local a = atan2(mx - s.x, my - s.y)
+      local mx, my = btnv(6), btnv(7)-16
       
-      s.vx = s.vx + cos(a) * acc
-      s.vy = s.vy + sin(a) * acc
+      local d = dist(mx, my, s.x, s.y)
+      movx = movx + (mx - s.x) / d
+      movy = movy + (my - s.y) / d
     end
     
-    if btn(0) then s.vx = s.vx - acc end
-    if btn(1) then s.vx = s.vx + acc end
-    if btn(2) then s.vy = s.vy - acc end
-    if btn(3) then s.vy = s.vy + acc end
+    if btn(0) then movx = movx - 1 end
+    if btn(1) then movx = movx + 1 end
+    if btn(2) then movy = movy - 1 end
+    if btn(3) then movy = movy + 1 end
+    
+    if abs(movx)+abs(movy) > 0 then
+      local d = dist(movx, movy)
+      s.vx = s.vx + movx/d * acc
+      s.vy = s.vy + movy/d * acc
+    end
   end
   
   s.x = s.x + s.vx * dt()
@@ -124,8 +200,54 @@ function update_apple(s)
   
   collide_borders(s)
   
+  for snek in group("snakes") do
+    if s.id == my_id then
+      if not (s.dead) and collide_objobj(s, snek) then
+        apple_die(s, snek)
+        break
+      end
+    end
+    
+    for _,p in pairs(snek.parts) do
+      if collide_objobj(s, p) then
+        -- push back
+        local d = dist(s.x, s.y, p.x, p.y)
+        local dx = (s.x-p.x)/d
+        local dy = (s.y-p.y)/d
+        
+        s.vx = lerp(s.vx, 45*dx, 10*dt())
+        s.vy = lerp(s.vy, 45*dy, 10*dt())
+      end
+    end
+  end
+  
+  if not IS_SERVER then
+    s.diffx = sgn(s.diffx) * max(abs(s.diffx) - 0.5, 0)
+    s.diffy = sgn(s.diffy) * max(abs(s.diffy) - 0.5, 0)
+  end
+  
+  local col = collide_objgroup(s, "apples")
+  if col then
+    -- push back
+    local d = dist(s.x, s.y, col.x, col.y)
+    local dx = (s.x-col.x)/d
+    local dy = (s.y-col.y)/d
+    
+    s.vx = lerp(s.vx, 60*dx, 10*dt())
+    s.vy = lerp(s.vy, 60*dy, 10*dt())
+    col.vx = lerp(s.vx, -60*dx, 10*dt())
+    col.vy = lerp(s.vy, -60*dy, 10*dt())
+  end
+  
   local nstate
-  if abs(s.vx) + abs(s.vy) > 0.1 then
+  if s.state == "res" or s.state == "hurt" then
+    local a,b,c = anim_step(s.name, s.state, s.animt)
+    if c >= 1 then
+      nstate = "idle"
+    else
+      nstate = s.state
+    end
+  elseif abs(s.vx) + abs(s.vy) > 0.1 or abs(s.diffx) + abs(s.diffy) > 2 then
     nstate = "run"
   else
     nstate = "idle"
@@ -135,13 +257,63 @@ function update_apple(s)
     s.state = nstate
     s.animt = 0
   end
+  
+  if abs(s.vx) > 0.1 then
+    s.faceleft = s.vx < 0 
+  end
+end
+
+function apple_die(s, snek)
+  s.dead = true
+  s.name = "dead_apple"
+  s.state = "hurt"
+  s.animt = 0
+  
+  if snek then
+    local d = dist(snek.x, snek.y, s.x, s.y)
+    local dx = (snek.x - s.x) / d
+    local dy = (snek.y - s.y) / d
+    
+    s.vx = dx * 120
+    s.vy = dy * 120
+  end
+  
+  local a = rnd(1)
+  for i = 1,6 do
+    create_star(s.x, s.y, a+i/6)
+  end
+  
+  add_shake(4)
+  local all_dead = true
+  for a in group("apples") do
+    all_dead = all_dead and a.dead
+  end
+  if all_dead then
+    game_over = true
+  end
+end
+
+function apple_resurrect(s)
+  s.dead = false
+  s.name = "apple"
+  s.state = "res"
+  s.animt = 0
+  
+  local a = rnd(1)
+  for i = 1,6 do
+    create_star(s.x, s.y, a+i/6)
+  end
+  
+  if s.id == my_id then
+    add_shake(4)
+  end
 end
 
 function update_snake(s)
+  s.animt = s.animt + dt()
+  
   if s.dead then
-    s.animt = s.animt + dt()
-    
-    local k = flr(s.animt/0.15)
+    local k = flr(s.animt/0.15*4)
     local n = 0
     for i,p in pairs(s.parts) do
       if i < k then
@@ -157,40 +329,105 @@ function update_snake(s)
     end
     
     if n == 0 then
-      add_shake(4)
-      deregister_object(s)
+      remove_snake(s)
     end
     
     return
   end
 
-  local md, target = 99999
-  for a in group("apples") do
-    local nd = sqrdist(a.x - s.x, a.y - s.y)
-    if nd < md then
-      target = a
-      md = nd
+  s.target_t = s.target_t - dt()
+  if s.target_t < 0 then-- or s.target.dead then
+    local md, target = 99999
+    for a in group("apples") do
+      local nd = sqrdist(a.x - s.x, a.y - s.y)
+      if nd < md and not a.dead then
+        target = a
+        md = nd
+      end
     end
+    
+    if not target then
+      local w = BOARD_WN * 8
+      local h = BOARD_HN * 8
+      target = {
+        x = w/4+rnd(w/2),
+        y = h/4+rnd(h/2)
+      }
+    end
+    
+    s.target_t = 1+rnd(3)
+    s.target = target
   end
   
-  if not target then
-    return
+  local diff_a
+  if s.steer then
+    diff_a = 0.5 * sgn(s.steer)
+    
+    s.steer = sgn(s.steer) * (abs(s.steer) - dt())
+    if s.steer <= 0 then
+      s.steer = nil
+    end
+  else
+    local target_a = atan2(s.target.x - s.x, s.target.y - s.y)
+    diff_a = angle_diff(s.a, target_a)
   end
   
-  local target_a = atan2(target.x - s.x, target.y - s.y)
-  local diff_a = angle_diff(s.a, target_a)
+  s.a = s.a + s.va * dt() * diff_a
   
-  s.a = s.a + dt() * diff_a
-  
-  local wave = 0.1 * cos(t()/2)
+  local wave = 0.1 * cos(s.animt/2)
   s.x = s.x + s.spd * cos(s.a + wave) * dt()
   s.y = s.y + s.spd * sin(s.a + wave) * dt()
   
+  if not s.steer then
+    local dprev = 48
+    local prev = {
+      x = s.x + dprev * cos(s.a),
+      y = s.y + dprev * sin(s.a)
+    }
+    if collide_borders(prev) then
+      local na = atan2(prev.x - s.x, prev.y - s.y)
+      s.steer = (0.5 + rnd(0.5)) * sgn(angle_diff(s.a, na))
+    else
+      prev.w, prev.h = 0,0
+      -- todo collide with snek bodies
+      for snek in group("snakes") do
+        if snek ~= s then
+          for i = 1,#snek.parts,4 do
+            local p = snek.parts[i]
+            if p and collide_objobj(prev, p) then
+              s.steer = (0.5 + rnd(0.5)) * sgn(rnd(2)-1)
+              break
+            end
+          end
+        end
+      end
+      
+    end
+  end
+  
+  local die = false
   if collide_borders(s) then
     -- snek dies
-    s.dead = true
-    s.animt = 0
-    add_shake(8)
+    die = true
+  end
+  
+  for snek in group("snakes") do
+    if snek ~= s then
+      for _,p in pairs(snek.parts) do
+        die = die or collide_objobj(s, p)
+      end
+    end
+  end
+  
+  if not IS_SERVER then
+    local dx = sgn(s.diffx) * max(abs(s.diffx), 0.2)
+    local dy = sgn(s.diffy) * max(abs(s.diffy), 0.2)
+    
+    s.x = s.x + dx
+    s.y = s.y + dy
+    
+    s.diffx = s.diffx - dx
+    s.diffy = s.diffy - dy
   end
   
   s.parts[1].x = s.x
@@ -207,20 +444,55 @@ function update_snake(s)
       part.y = lerp(part.y, prev.y, 1-md/d)
     end
   end
+  
+  
+  if die and IS_SERVER then
+    snake_die(s)
+  end
+end
+
+function snake_die(s)
+  s.dead = true
+  s.animt = 0
+  add_shake(8)
 end
 
 function collide_borders(s)
-  local bw = 256
-  local bh = 160
+  local bw = BOARD_WN*8
+  local bh = BOARD_HN*8
 
   local col
+  if not s.w then
+    if s.x < 8 then
+      s.x = 8
+      col = true
+    end
+    
+    if s.y < 6 then
+      s.y = 6
+      col = true
+    end
+    
+    if s.x >= bw-8 then
+      s.x = bw-8-0.1
+      col = true
+    end
+    
+    if s.y >= bh-6 then
+      s.y = bh-6-0.1
+      col = true
+    end
+  
+    return col
+  end
+  
   if s.x-s.w/2 < 8 then
     s.x = 8+s.w/2
     col = true
   end
   
-  if s.y-s.h/2 < 22 then
-    s.y = 22 + s.h/2
+  if s.y-s.h/2 < 6 then
+    s.y = 6 + s.h/2
     col = true
   end
   
@@ -259,15 +531,22 @@ end
 function draw_apple(s)
   local plt = body_colors[s.color]
   
---  plt = {}
+  local ox,oy = s.x, s.y
+  
+  s.x = s.x - s.diffx
+  s.y = s.y - s.diffy
   
   pal(1, plt[1])
   pal(2, plt[2])
   pal(3, plt[3])
+  pal(4, lit[plt[3]])
   draw_self(s)
   pal(1, 1)
   pal(2, 2)
   pal(3, 3)
+  pal(4, 4)
+  
+  s.x, s.y = ox, oy
 end
 
 function draw_snake(s)
@@ -334,13 +613,16 @@ function create_apple(id, x, y, color)
     id     = id,
     x      = x,
     y      = y,
-    w      = 6,
-    h      = 6,
+    w      = 8,
+    h      = 8,
     vx     = 0,
     vy     = 0,
     name   = "apple",
     state  = "idle",
     animt  = rnd(1),
+    faceleft = false,
+    diffx  = 0,
+    diffy  = 0,
     update = update_apple,
     draw   = draw_apple,
     regs   = {"to_update", "to_draw1", "apples"}
@@ -356,6 +638,7 @@ function create_apple(id, x, y, color)
   apples[id] = s
   
   register_object(s)
+  add_playerui(s)
   
   log("Created apple!")
   
@@ -363,23 +646,32 @@ function create_apple(id, x, y, color)
 end
 
 local snake_id = 1
-function create_snake(id, x, y, n, ca, cb)
+function create_snake(id, x, y, n, ca, cb, spd)
   local s = {
-    id     = id,
-    x      = x,
-    y      = y,
-    w      = 8,
-    h      = 8,
-    parts  = {},
-    a      = rnd(1),
-    spd    = 25,
-    animt  = 0,
-    ca     = ca or irnd(10)+1,
-    cb     = cb or irnd(10)+1,
-    update = update_snake,
-    draw   = draw_snake,
-    regs   = {"to_update", "to_draw2", "snakes"}
+    id       = id,
+    x        = x,
+    y        = y,
+    w        = 8,
+    h        = 8,
+    parts    = {},
+    a        = rnd(1),
+    va       = 1,
+    spd      = spd or 25,
+    animt    = rnd(1),
+    target_t = 0,
+    target   = {x = x, y = y},
+    ca       = ca or irnd(10)+1,
+    cb       = cb or irnd(10)+1,
+    diffx    = 0,
+    diffy    = 0,
+    update   = update_snake,
+    draw     = draw_snake,
+    regs     = {"to_update", "to_draw2", "snakes"}
   }
+  
+  if spd then
+    s.va = spd/25
+  end
   
   if not id then
     for i = 1,n do
@@ -399,12 +691,16 @@ function create_snake(id, x, y, n, ca, cb)
   for i,p in pairs(s.parts) do
     if i == 1 then
       p.s = 64
+      p.w, p.h = 8,8
     elseif i >= n-2 then
       p.s = 70
+      p.w, p.h = 2,2
     elseif i >= n-4 then
       p.s = 68
+      p.w, p.h = 4,4
     else
       p.s = 66
+      p.w, p.h = 6,6
     end
   end
   
@@ -419,10 +715,40 @@ function create_snake(id, x, y, n, ca, cb)
   
   register_object(s)
   
+  log("Created snake!")
+  
+  return s
+end
+
+local bomb_id = 1
+function create_bomb(id, x, y)
+  local s = {
+    x       = x,
+    y       = y,
+    white   = 0.5,
+    boom    = 1.8,
+    trigger = false,
+    update  = update_bomb,
+    draw    = draw_bomb,
+    regs    = { "to_update", "to_draw1", "bombs" }
+  }
+  
+  if not id then
+    s.id = bomb_id
+    bomb_id = bomb_id + 1
+  else
+    bomb_id = id + 1
+  end
+  
+  bombs[s.id] = s
+  
+  register_object(s)
   return s
 end
 
 function create_star(x,y,a,spd)
+  if IS_SERVER then return end
+
   spd = spd or 100+rnd(50)
   
   local s = {
@@ -442,6 +768,7 @@ function create_star(x,y,a,spd)
   return s
 end
 
+
 -- DESTROYS
 
 function remove_apple(s)
@@ -449,6 +776,13 @@ function remove_apple(s)
 
   deregister_object(s)
   apples[s.id] = nil
+  del_playerui(s)
+end
+
+function remove_snake(s)
+  add_shake(4)
+  deregister_object(s)
+  dead_snakes[s.id] = true
 end
 
 
@@ -457,8 +791,8 @@ end
 function init_board()
   -- initializing the board tables with a sprite id for each tile, to draw on draw_table().
   
-  board_w = screen_w()/8
-  board_h = screen_h()/8-2
+  board_w = BOARD_WN
+  board_h = BOARD_HN
 
   board = {}
   for i = 0, board_h-1 do
@@ -492,7 +826,7 @@ end
 function draw_board()
   for y,l in pairs(board) do
     for x,v in pairs(l) do
-      spr(v, x*8, y*8 + 16)
+      spr(v, x*8, y*8)
     end
   end
 end
@@ -507,7 +841,38 @@ end
 -- MISC UPDATE
 
 function new_wave()
-  create_snake(nil, 64+rnd(128), 16+36+rnd(72), 24+irnd(16))
+  for s in group("apples") do
+    s.dead = false
+    s.name = "apple"
+  end
+
+  level = level + 1
+  
+  local w = BOARD_WN*8
+  local h = BOARD_HN*8
+  local ca, cb = irnd(10)+1, irnd(10)+1
+  
+  local npts = level * 10
+  local pts = npts
+  local take_pts = function(n)
+    n = min(n/100*npts, pts)
+    pts = pts - n
+    return n
+  end
+  
+  local spd = 25 + take_pts(rnd(50))/2
+  local num = 1 + flr(take_pts(rnd(50))/10)
+  local len = 16 + flr(take_pts(rnd(50))/50 * 32)
+  
+  for i = 1, num do
+    local x = w/4+rnd(w/2)
+    local y = h/4+rnd(h/2)
+    
+    create_snake(nil, x, y, len, ca, cb, spd)
+  end
+  
+  --create_snake(nil, w/4+rnd(w/2), h/4+rnd(h/2), 24+irnd(16), ca, cb)
+  --create_snake(nil, w/4+rnd(w/2), h/4+rnd(h/2), 24+irnd(16), ca, cb)
 end
 
 function add_shake(p)
@@ -531,11 +896,39 @@ function update_shake()
   end
 end
 
+function apply_shake()
+  camera_move(shkx, shky)
+end
+
+local players_ui = {}
+function update_topbar()
+  for i,u in pairs(players_ui) do
+    u.y = lerp(u.y, i*18, 3*dt())
+  end
+end
+
+function add_playerui(s)
+  if IS_SERVER then return end
+  add(players_ui, {
+    y = screen_h(), s = s
+  })
+end
+
+function del_playerui(s)
+  if IS_SERVER then return end
+  for i,u in pairs(players_ui) do
+    if u.s == s then
+      del_at(players_ui, i)
+      return
+    end
+  end
+end
+
 
 -- MISC DRAW
 
 function draw_cursor()
-  palt(11, false)
+  palt(0, false)
   palt(12, true)
   local mx, my = btnv(6), btnv(7)
   if btn(8) then
@@ -543,6 +936,135 @@ function draw_cursor()
   else
     spr(98, mx, my, 1, 2)
   end
+  palt(12, false)
+end
+
+function draw_topbar()
+  --printp(0x0120, 0x0230, 0x0300, 0x0000)
+  --printp_color(5, 3, 2)
+  --
+  --pprint("Apples!", 0, -2)
+  
+  target(title_surf)
+  cls()
+  
+  palt(0, true)
+  
+  local x = 84 - (t() * 30) % 84
+  spr(224, x, 0, 11, 2)
+  spr(224, x-84, 0, 11, 2)
+  --spr(224, x+84, 0, 7, 2)
+  
+  palt(0, false)
+  palt(2, true)
+  spr(176, 0, 0, 9, 2)
+  palt(2, false)
+  
+  palt(0, true)
+  
+  target()
+
+  local x = 144-34
+
+  palmap(lit)
+  spr_sheet(title_surf, x-1, 0)
+  palmap(drk)
+  spr_sheet(title_surf, x+1, 0)
+  palmap(nrm)
+  spr_sheet(title_surf, x, 0)
+
+
+  
+  pal(5,10)
+  spr(208, 1, 0, 8, 1)
+  spr(216, 1, 7, 8, 1)
+  pal(5,15)
+  spr(208, 3, 0, 8, 1)
+  spr(216, 3, 7, 8, 1)
+  pal(5,11)
+  spr(208, 2, 0, 8, 1)
+  spr(216, 2, 7, 8, 1)
+  pal(5,5)
+  
+  palt(0, false)
+  
+  if client.connected then
+    local str = "Lvl "..level
+    local x = screen_w() - 6 - str_px_width(str)
+    local y = -1
+    
+    printp(0x0000, 0x2130, 0x0000, 0x0000)
+    printp_color(5, 4, 3)
+    pprint(str, x, y)
+  
+    draw_playerui()
+  else
+    if castle and not castle.user.isLoggedIn then
+      str = "Log-in to play!"
+    elseif disconnected then
+      str = "Disconnected :("
+    else
+      str = "Connecting"
+      for i = 1,flr(t()/0.25)%4 do
+        str = str.."."
+      end
+    end
+    
+    printp(0x0000, 0x2130, 0x0000, 0x0000)
+    printp_color(5, 11, 10)
+    local w = str_px_width(str)
+    pprint(str, screen_w() - w - 3, -2)
+  end
+end
+
+function draw_playerui()
+  palt(11, false)
+  palt(0, false)
+  palt(12, true)
+  
+  local x = screen_w() - 17
+  local y = -1--screen_h() + 1
+  for _,u in pairs(players_ui) do
+    local y = y + round(u.y)
+    
+    local pic = u.s.pic
+    if pic then
+      palt(12, false)
+      spr_sheet(u.s.pic, x, y, 16, 16)
+      rect(x, y, x+15, y+15, 0)
+      pset(x+1,  y+1,  0)
+      pset(x+14, y+1,  0)
+      pset(x+1,  y+14, 0)
+      pset(x+14, y+14, 0)
+      palt(12, true)
+    else
+      spr(118, x, y, 2, 2)
+    end
+    
+    local plt = body_colors[u.s.color]
+    palmap{plt[1], plt[2], plt[3], lit[plt[3]]}
+    
+    spr(116, x-15, y, 2, 2)
+    
+    palt(11, true)
+    if u.s.dead then
+      spr(144, x-14, y, 2, 2)
+    else
+      spr(32, x-14, y, 2, 2)
+    end
+    palt(11, false)
+    
+    palmap{1, 2, 3, 4}
+    
+    if btnv(6) > x-15 and btnv(7) > y and btnv(7) < y + 16 then
+      printp(0x3300, 0x3130, 0x3230, 0x0330)
+      printp_color(5, plt[2], 0)
+      local str = u.s.username or "Guest"
+      local w = str_px_width(str)
+      pprint(str, x - 18 - w, y - 2)
+    end
+  end
+  
   palt(12, false)
 end
 
@@ -595,19 +1117,43 @@ function load_anims()
   local info = {
     apple = {
       idle = {
---        sheet = "sprites",
         dt = 0.06,
         sprites = {32, 32, 32, 32, 32, 44, 44, 32, 46, 46, 32, 44, 44, 32, 46, 46, 32, 44, 44, 32, 32, 32, 32, 32},
         w = 2,
         h = 2
       },
       run = {
---        sheet = "sprites",
         dt = 0.06,
         sprites = {34, 36, 38, 40, 42},
         w = 2,
         h = 2
       },
+      res = {
+        dt = 0.06,
+        sprites = {126, 126, 126, 124, 124},
+        w = 2,
+        h = 2
+      }
+    },
+    dead_apple = {
+      idle = {
+        dt = 0.06,
+        sprites = {144, 144, 144, 144, 144, 156, 156, 144, 158, 158, 144, 156, 156, 144, 158, 158, 144, 156, 156, 144, 144, 144, 144, 144},
+        w = 2,
+        h = 2
+      },
+      run = {
+        dt = 0.06,
+        sprites = {146, 148, 150, 152, 154},
+        w = 2,
+        h = 2
+      },
+      hurt = {
+        dt = 0.06,
+        sprites = {124, 124, 124, 126, 126, 158},
+        w = 2,
+        h = 2
+      }
     },
     star = {
       a = {
@@ -623,3 +1169,13 @@ function load_anims()
   
   init_anims(info)
 end
+
+
+-- MISC MISC
+
+function palmap(m)
+  for ca,cb in pairs(m) do
+    pal(ca, cb)
+  end
+end
+

@@ -20,15 +20,63 @@ start_client()
 
 require("game")
 
+function sugar.on_resize()
+  log("helllllo")
+end
+
 function client.load()
-  init_sugar("Apple!", 256, 160, 3)
-  screen_render_integer_scale(false)
+  init_sugar("Apple!", 256+32, 160, 3)
+  screen_render_integer_scale(true)
+--  screen_render_integer_scale(false)
 --  screen_resizeable(true)
+
+  screen_shader([[
+    varying vec2 v_vTexcoord;
+    varying vec4 v_vColour;
+    
+    extern float time;
+    
+    const float PI = 3.1415926535897932384626433832795;
+    
+    float power2(float);
+    
+    vec4 effect(vec4 color, Image texture, vec2 coords, vec2 screen_coords)
+    {
+      vec4 col = Texel_color(texture, coords);
+      
+      vec2 co = mod(coords * SCREEN_SIZE, 1.0);
+      float k = 1.0 - max(power2(co.x), power2(co.y));
+
+      vec4 fcol = (0.75*k + 0.75) * col;
+
+      vec2 tn = vec2(0.65/SCREEN_SIZE.x, 0.35/SCREEN_SIZE.y);
+      
+      vec4 col1 = Texel_color(texture, coords-tn);
+      vec4 col2 = col;
+      vec4 col3 = Texel_color(texture, coords+tn);
+      
+      col1 += Texel_color(texture, coords-tn*2.0);
+      col2 += col;
+      col3 += Texel_color(texture, coords+tn*2.0);
+      
+      float v = coords.y*64.0+8.0*time;
+      vec4 ncol = vec4((0.6+0.4*cos(v))*(col1.r+col3.b),
+                       (0.6+0.4*cos(v+1.0*PI/3.0))*(col1.r+col2.g),
+                       (0.6+0.4*cos(v+2.0*PI/3.0))*(col2.g+col3.b),
+                       1.0);
+      
+      return mix(fcol, ncol, 0.05) + 0.2 * ncol;
+    }
+    
+    float power2(float a){
+      return a*a;//*a*a;
+    }
+  ]])
   
---  set_frame_waiting(30)
+  set_frame_waiting(30)
   
   use_palette(palettes.bubblegum16)
-  set_background_color(15)
+  set_background_color(0)
   
   define_controls()
   load_assets()
@@ -45,5 +93,6 @@ function client.update()
 end
 
 function client.draw()
+  screen_shader_input({time = t()})
   _draw()
 end
