@@ -65,15 +65,6 @@ local title_surf
 -- CORE
 
 function _init()
-  if castle then
-    local info = castle.game.getInitialParams()
-    if info then
-      for k,v in pairs(info) do
-        log(k.." : "..v)
-      end
-    end
-  end
-
   init_object_mgr(
     "apples",
     "snakes",
