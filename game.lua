@@ -1244,6 +1244,8 @@ function define_ui()
       
       local str
       
+      target()
+      
       if game_over then
         if group_size("apples") == 1 then
           str = "I got to level "..level.."! "..pick{
@@ -1274,10 +1276,10 @@ function define_ui()
         }
       end
       
-      castle.post.create{
+      network.async(castle.post.create, nil, {
         message = str,
         media = canvas:newImageData()
-      }
+      })
     end
   })
   
