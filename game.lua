@@ -1234,9 +1234,50 @@ function define_ui()
     spr = 122,
     c   = 10,
     on_release = function(s)
-      if not castle then return end
+      if not (castle and castle.post) then return end
       
+      local w,h = screen_w() * 3, screen_h() * 3
+      local canvas = love.graphics.newCanvas(w, h)
+      render_to_canvas(canvas)
+      flip()
+      render_to_canvas()
       
+      local str
+      
+      if game_over then
+        if group_size("apples") == 1 then
+          str = "I got to level "..level.."! "..pick{
+            "Betcha you can't do better~!",
+            "Pretty sick~!",
+            "Think you can beat that~?"
+          }
+        else
+          str = "We got to level "..level.." with "
+          local last
+          for a in group("apples") do
+            if a.id ~= my_id then
+              if last then
+                str = str..last..", "
+              end
+              
+              last = a.username
+            end
+          end
+          
+          str = str:sub(1, #str-2).." and "..last.."~!"
+        end
+      else
+        str = "Come join me on Apples! "..pick{
+          "The multiplayer is so fun!",
+          "It's so shiny!",
+          "Let's beat up some sneks!"
+        }
+      end
+      
+      castle.post.create{
+        message = str,
+        media = canvas:newImageData()
+      }
     end
   })
   
