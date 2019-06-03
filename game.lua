@@ -1239,7 +1239,7 @@ function define_ui()
       local w,h = screen_w() * 3, screen_h() * 3
       local canvas = love.graphics.newCanvas(w, h)
       render_to_canvas(canvas)
-      flip()
+      half_flip()
       render_to_canvas()
       
       local str
