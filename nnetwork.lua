@@ -15,6 +15,7 @@ function init_network()
     
     server.share[2] = {} -- apples
     server.share[3] = {} -- snakes
+    server.share[4] = {} -- bombs
   else
 
   end
@@ -88,6 +89,8 @@ function client_input(diff)
       elseif apple.dead and not data[6] then
         apple_resurrect(apple)
       end
+      
+      apple.ready = data[9]
     end
     
     if not apple.username then
@@ -116,15 +119,10 @@ function client_input(diff)
 --        p.y = p_d[2]
 --      end
 --    end
-    
---    if data[1][1] and snake.parts[1] then
---      snake.parts[1].x = data[1][1][1]
---      snake.parts[1].y = data[1][1][2]
---    end
 
     if data[1][1] then
-      snake.diffx = snake.diffx + (data[1][1][1] - snake.x - snake.diffx)
-      snake.diffy = snake.diffy + (data[1][1][2] - snake.y - snake.diffy)
+      snake.diffx = data[1][1][1] - snake.x
+      snake.diffy = data[1][1][2] - snake.y
     end
     
     if not snake.dead then
@@ -155,7 +153,29 @@ function client_input(diff)
     ::snek_done::
   end
   
-  local nlevel = client.share[4]
+  local bomb_data = client.share[4]
+  for id, data in pairs(bomb_data) do
+    local bomb = bombs[id]
+    if not bomb then
+      if dead_bombs[id] then goto bomb_done end
+      bomb = create_bomb(id, data[1], data[2])
+    end
+    
+    local nx = data[1] + delay*data[3]
+    local ny = data[2] + delay*data[4]
+    
+    bomb.diffx = nx - bomb.x
+    bomb.diffy = ny - bomb.y
+    
+    if data[5] then
+      bomb.trigger = true
+      bomb.boom = data[5] - delay
+    end
+    
+    ::bomb_done::
+  end
+  
+  local nlevel = client.share[5]
   if nlevel and nlevel > level then
     local my_apple = apples[my_id]
     if my_apple and my_apple.dead then
@@ -163,6 +183,28 @@ function client_input(diff)
     end
     level = nlevel
   end
+  
+  if client.share[6] ~= nil then
+    if client.share[6] and not in_game then
+      local my_apple = apples[my_id]
+      if my_apple and my_apple.dead then
+        apple_resurrect(my_apple)
+      end
+      my_apple.ready = false
+      
+      init_game()
+    elseif in_game and not client.share[6] then
+      -- game over
+      game_over = true
+      in_game = false
+      define_ui()
+    end
+    
+    in_game = client.share[6]
+  end
+  
+  countdown = client.share[7] or 60
+  
 end
 
 function client_output()
@@ -180,6 +222,7 @@ function client_output()
     client.home[4] = my_player.vx
     client.home[5] = my_player.vy
     client.home[6] = my_player.dead
+    client.home[9] = my_player.ready
   else
     client.home[2] = nil
     client.home[3] = nil
@@ -209,23 +252,45 @@ function client_disconnect()
 end
 
 
-function server_input()
-  for id,ho in pairs(server.homes) do
-    local apple = apples[id]
-    if not apple then
-      apple = create_apple(id, 64, 64)
+function server_input(id, diff)
+  local ho = server.homes[id]
+  
+  local apple = apples[id]
+  if not apple then
+    local w = BOARD_WN*8
+    local h = BOARD_HN*8
+    local x = w/3+rnd(w/3)
+    local y = h/3+rnd(h/3)
+    
+    x = x + sgn(x - w/2) * 1.5 * w/6
+    y = y + sgn(y - h/2) * 1.5 * h/6
+    
+    apple = create_apple(id, x, y)
+  end
+  
+  if ho[2] then
+    apple.x = ho[2] + ho[4] * dt()
+    apple.y = ho[3] + ho[5] * dt()
+    apple.vx = ho[4]
+    apple.vy = ho[5]
+    
+    local pdead = apple.dead
+    apple.dead = ho[6]
+    if in_game and ho[6] and not pdead then
+      local all_dead = true
+      for a in group("apples") do
+        all_dead = all_dead and a.dead
+      end
+      
+      if all_dead then
+        --game over
+        in_game = false
+      end
     end
     
-    if ho[2] then
-      apple.x = ho[2] + ho[4] * dt()
-      apple.y = ho[3] + ho[5] * dt()
-      apple.vx = ho[4]
-      apple.vy = ho[5]
-      apple.dead = ho[6]
-      
-      apple.username = ho[7]
-      apple.pic = ho[8]
-    end
+    apple.username = ho[7]
+    apple.pic = ho[8]
+    apple.ready = ho[9]
   end
 end
 
@@ -243,7 +308,8 @@ function server_output()
         apple.color,
         apple.dead,
         apple.username,
-        apple.pic
+        apple.pic,
+        apple.ready
       }
     end
   end
@@ -272,7 +338,21 @@ function server_output()
     --end
   end
   
-  server.share[4] = level
+  for id,s in pairs(server.share[4]) do
+    if dead_bombs[id] then
+      server.share[4][id] = nil
+    end
+  end
+  
+  for id,s in pairs(bombs) do
+    server.share[4][id] = {
+      s.x, s.y, s.vx, s.vy, s.trigger and s.boom
+    }
+  end
+  
+  server.share[5] = level
+  server.share[6] = in_game
+  server.share[7] = countdown
 end
 
 function server_new_client(id)
@@ -302,7 +382,8 @@ end
 --   [5] = vy,
 --   [6] = dead,
 --   [7] = username,
---   [8] = pic_url
+--   [8] = pic_url,
+--   [9] = ready
 -- }
 
 
@@ -320,7 +401,8 @@ end
 --       [5] = color,
 --       [6] = dead,
 --       [7] = username,
---       [8] = pic
+--       [8] = pic,
+--       [9] = ready
 --     },
 --     ...
 --   }
@@ -340,7 +422,19 @@ end
 --     },
 --     ...
 --   },
---   [4] = current_level
+--   [4] = {
+--     [bomb_id] = {
+--       [1] = x,
+--       [2] = y,
+--       [3] = vx,
+--       [4] = vy,
+--       [5] = [trigger and boom]
+--     },
+--     ...
+--   },
+--   [5] = current_level,
+--   [6] = in_game,
+--   [7] = countdown
 -- }
 
 

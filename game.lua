@@ -9,16 +9,16 @@ require("object")
 --- title-screen -> don't start game directly, can let people join first
 
 
---? make snake steer away from walls + other sneks
---?- ^ checking too far?
+--? difficulty progression
 
---- add other way to kill snakes?? (pick-ups???) (bombs!)
 
---+ difficulty progression
+--- display countdown
+--- trigger game over from server
+--- display gameover
+--- credits on the gameover
 
---- game over (+ restart ??)
---- credits go on the gameover
---- restart = vote [4/6] -> restart in {countdown}
+--- post screenshot button
+
 
 --- anim for apple mouthful going through snek body
 
@@ -31,6 +31,7 @@ require("object")
 ---- apple rebirth .
 ---- select button .
 ---- press button  .
+---- release button.
 
 --- music???
 
@@ -40,11 +41,17 @@ BOARD_HN = 18
 
 apples = {}
 snakes = {}
+bombs = {}
 dead_snakes = {}
+dead_bombs = {}
 
 level = 0
 
 bomb_t = 1
+
+in_game = false
+countdown = 60
+game_over = false
 
 local body_colors = {}
 local apple_colors = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
@@ -58,11 +65,23 @@ local title_surf
 -- CORE
 
 function _init()
+  if castle then
+    local info = castle.game.getInitialParams()
+    if info then
+      for k,v in pairs(info) do
+        log(k.." : "..v)
+      end
+    end
+  end
+
   init_object_mgr(
     "apples",
     "snakes",
-    "bombs"
+    "bombs",
+    "ui_button"
   )
+  
+  in_game = false
   
   load_anims()
   
@@ -71,9 +90,13 @@ function _init()
   if not IS_SERVER then
     title_surf = new_surface(9*8, 16, "title")
     load_colors()
+    
+    init_board()
   end
   
-  init_game()
+--  define_ui()
+  
+--  init_game()
 end
 
 function _update()
@@ -91,30 +114,63 @@ end
 
 function init_game()
   if IS_SERVER then
-    --create_snake(nil, 64, 64, 32)
     bomb_t = 1
-  else
-    init_board()
   end
   
+  in_game = true
   level = 0
   
---  create_apple(64,64)
-
---  add_playerui({color = 1})
---  add_playerui({color = 1})
---  add_playerui({color = 1})
---  add_playerui({color = 1})
---  add_playerui({color = 1})
---  add_playerui({color = 1})
---  add_playerui({color = 1})
+  log("Starting game.")
+  
+  if not IS_SERVER then
+    remove_all_buttons()
+  end
 end
 
 function update_game()
   update_shake()
   
-  if IS_SERVER and group_size("snakes") == 0 then
-    new_wave()
+  if in_game then
+    if IS_SERVER and group_size("snakes") == 0 then
+      new_wave()
+      bomb_t = 5
+    end
+    
+    bomb_t = bomb_t - dt()
+    if IS_SERVER and bomb_t <= 0 then
+      local w = BOARD_WN*8
+      local h = BOARD_HN*8
+      local x = w/4+rnd(w/2)
+      local y = h/4+rnd(h/2)
+      
+      create_bomb(nil, x, y)
+      
+      bomb_t = 3.5+rnd(1)
+    end
+  elseif IS_SERVER then
+    local ready, total = 0, 0
+    for a in group("apples") do
+      if a.ready then
+        ready = ready + 1
+      end
+      total = total + 1
+    end
+    
+    if ready == total and ready > 0 then
+      countdown = min(countdown - dt(), 10)
+    elseif ready > 0 then
+      countdown = countdown - dt()
+    else
+      countdown = 60
+    end
+    
+    if countdown <= 0 then
+      init_game()
+    end
+  else
+    if apples[my_id] and not ui_defined then
+      define_ui()
+    end
   end
 
   update_objects()
@@ -146,10 +202,45 @@ function draw_game()
   
   draw_objects()
   
+  draw_bottomfence()
   
   camera()
   
   draw_topbar()
+  
+  if not in_game then
+    --printp(0x3120, 0x0, 0x0, 0x0)
+    printp(0x0330, 0x3123, 0x0330, 0x0, 0x0)
+    local y
+    if game_over then
+      y = 32
+      local str = "GAME OVER"
+      local x = screen_w()/2 - (str_px_width(str) + #str)/2
+      --printp_color(5, 7, 2)
+      printp_color(5, 7, 0)
+      
+      for i = 1,#str do
+        local ch = str:sub(i, i)
+        pprint(ch, x, y + 4*cos(i/8-t()))
+        x = x + str_px_width(ch) + 1
+      end
+      
+      y = 112 + 16
+    else
+      y = 112
+    end
+    
+    if countdown < 60 then
+      --printp_color(5, 11, 10)
+      printp_color(5, 11, 0)
+      local str = (game_over and "Restarting in " or "Starting in ")..ceil(countdown)..'"'
+      local x = screen_w()/2 - str_px_width(str)/2
+      
+      pprint(str, x, y)
+    end
+    
+    
+  end
   
   palt(11, false)
   draw_cursor()
@@ -222,8 +313,8 @@ function update_apple(s)
   end
   
   if not IS_SERVER then
-    s.diffx = sgn(s.diffx) * max(abs(s.diffx) - 0.5, 0)
-    s.diffy = sgn(s.diffy) * max(abs(s.diffy) - 0.5, 0)
+    s.diffx = sgn(s.diffx) * max(abs(s.diffx) - 30 * dt(), 0)
+    s.diffy = sgn(s.diffy) * max(abs(s.diffy) - 30 * dt(), 0)
   end
   
   local col = collide_objgroup(s, "apples")
@@ -313,15 +404,17 @@ function update_snake(s)
   s.animt = s.animt + dt()
   
   if s.dead then
-    local k = flr(s.animt/0.15*4)
+    local k = flr(s.animt/0.15*6)
     local n = 0
     for i,p in pairs(s.parts) do
       if i < k then
         s.parts[i] = nil
-        local a = s.animt
-        local k = 3
-        for i = 1,k do
-          create_star(p.x, p.y, a+i/k)
+        if i%2==1 then
+          local a = s.animt * 1.25
+          local k = 3
+          for i = 1,k do
+            create_star(p.x, p.y, a+i/k)
+          end
         end
       else
         n = n + 1
@@ -420,8 +513,8 @@ function update_snake(s)
   end
   
   if not IS_SERVER then
-    local dx = sgn(s.diffx) * max(abs(s.diffx), 0.2)
-    local dy = sgn(s.diffy) * max(abs(s.diffy), 0.2)
+    local dx = sgn(s.diffx) * max(abs(s.diffx), 6 * dt())
+    local dy = sgn(s.diffy) * max(abs(s.diffy), 6 * dt())
     
     s.x = s.x + dx
     s.y = s.y + dy
@@ -507,6 +600,107 @@ function collide_borders(s)
   end
   
   return col
+end
+
+function update_bomb(s)
+  if s.boom > 0 then
+    local collide = function(o)
+      local d = dist(s.x, s.y, o.x, o.y)
+      local dx = (s.x - o.x) / d
+      local dy = (s.y - o.y) / d
+      
+      s.vx = s.vx + dx * 60 * dt()
+      s.vy = s.vy + dy * 60 * dt()
+      
+      if not o.dead then
+        s.trigger = true
+      end
+    end
+  
+    for o in group("apples") do
+      if collide_objobj(s, o) then
+        collide(o)
+      end
+    end
+    
+    for o in group("snakes") do
+      if collide_objobj(s, o) then
+        collide(o)
+      end
+    end
+  
+    s.x = s.x + s.vx * dt()
+    s.y = s.y + s.vy * dt()
+    
+    s.a = s.a + sgn(s.vx) * dist(s.vx, s.vy) * dt() * 0.05
+    
+    s.vx = lerp(s.vx, 0, dt())
+    s.vy = lerp(s.vy, 0, dt())
+    
+    local ox,oy = s.x, s.y
+    if collide_borders(s) then
+      if ox ~= s.x then
+        s.vx = -s.vx
+      end
+      
+      if oy ~= s.y then
+        s.vy = -s.vy
+      end
+    end
+    
+    if not IS_SERVER then
+      local dx = sgn(s.diffx) * max(abs(s.diffx), 0.2)
+      local dy = sgn(s.diffy) * max(abs(s.diffy), 0.2)
+      
+      s.x = s.x + dx
+      s.y = s.y + dy
+      
+      s.a = s.a + sgn(dx) * dist(dx, dy) * 0.05
+      
+      s.diffx = s.diffx - dx
+      s.diffy = s.diffy - dy
+    end
+  end
+  
+  if s.trigger then
+    local not_boom = (s.boom > 0)
+    
+    s.boom = s.boom - dt()
+    
+    if s.boom < -0.5 then
+      remove_bomb(s)
+    elseif s.boom <= 0 and not_boom then
+      if IS_SERVER then
+        --kill sneks
+        for snek in group("snakes") do
+          if not snek.dead and dist(s.x, s.y, snek.x, snek.y) <= 32 then
+            snake_die(snek)
+          end
+        end
+        
+        for bomb in group("bombs") do
+          if not bomb.trigger and dist(s.x, s.y, bomb.x, bomb.y) <= 32 then
+            bomb.trigger = true
+          end
+        end
+        
+      else
+        --kill player apple if close
+        local apple = apples[my_id]
+        if apple and not apple.dead and dist(s.x, s.y, apple.x, apple.y) < 32 then
+          apple_die(apple, s)
+        end
+        
+        -- add stars??
+        local a = rnd(1)
+        for i = 1,8 do
+          create_star(s.x, s.y, a+i/8)
+        end
+        add_shake(12)
+      end
+    end
+  
+  end
 end
 
 function update_star(s)
@@ -599,6 +793,44 @@ function draw_snake(s)
   pal(1,  1)
   pal(2,  2)
   pal(3,  3)
+end
+
+function draw_bomb(s)
+  palt(12, true)
+  palt(11, false)
+
+  local a = round(s.a*20)/20
+  local x,y = round(s.x), round(s.y)
+  
+  if s.white > 0 then
+    s.white = s.white - dt()
+    aspr(190, x, y - 3, a, 2, 2)
+  elseif s.trigger then
+    if s.boom < 0 then
+      local t = -s.boom/0.5 * 1
+      
+      local r = 32 * cos(t * 0.35 - 0.08)
+      if r > 0 then circfill(s.x, s.y, r, 15) end
+      
+      local r = 32 * cos(t * 0.35 - 0.07)
+      if r > 0 then circfill(s.x, s.y, r, 10) end
+      
+      local r = 32 * cos(t * 0.35 - 0.06)
+      if r > 0 then circfill(s.x, s.y, r, 11) end
+      
+      local r = 32 * cos(t * 0.35 - 0.05)
+      if r > 0 then circfill(s.x, s.y, r, 5) end
+    else
+      local n = flr(s.boom / 0.1)%2
+      aspr(188 + n*2, s.x, s.y - 2, s.a, 2, 2)
+    end
+  else
+    aspr(186, x, y - 2, a, 2, 2)
+    spr(185, x-3.5, y-3.5 - 2)
+  end
+  
+  palt(12, false)
+  palt(11, true)
 end
 
 function draw_star(s)
@@ -725,24 +957,41 @@ function create_bomb(id, x, y)
   local s = {
     x       = x,
     y       = y,
+    w       = 6,
+    h       = 6,
+    vx      = 0,
+    vy      = 0,
+    a       = 0,
     white   = 0.5,
     boom    = 1.8,
     trigger = false,
+    diffx   = 0,
+    diffy   = 0,
     update  = update_bomb,
     draw    = draw_bomb,
     regs    = { "to_update", "to_draw1", "bombs" }
   }
   
+  if not IS_SERVER then
+    local a = rnd(1)
+    for i=1,4 do
+      create_star(x, y, a+i/4)
+    end
+  end
+  
   if not id then
     s.id = bomb_id
     bomb_id = bomb_id + 1
   else
+    s.id = id
     bomb_id = id + 1
   end
   
   bombs[s.id] = s
   
   register_object(s)
+  
+  log("Created bomb!")
   return s
 end
 
@@ -783,6 +1032,12 @@ function remove_snake(s)
   add_shake(4)
   deregister_object(s)
   dead_snakes[s.id] = true
+end
+
+function remove_bomb(s)
+  deregister_object(s)
+  bombs[s.id] = nil
+  dead_bombs[s.id] = true
 end
 
 
@@ -832,9 +1087,182 @@ function draw_board()
 end
 
 function draw_bottomfence()
-  for i = 1, 14 do
-    spr(24, i*8, 120)
+  local y = (BOARD_HN-1) * 8
+  for i = 1, BOARD_WN-2 do
+    spr(24, i*8, y)
   end
+end
+
+
+-- UI BUTTONS
+
+function update_button(s)
+  local xa, xb = s.x - s.w/2, s.x + s.w/2
+  local ya, yb = s.y - s.h/2, s.y + s.h/2
+  
+  local mx, my = btnv(6), btnv(7)-16
+  
+  if mx >= xa and mx <= xb and my >= ya and my <= yb then
+    s.hover = true
+    if btn(8) then
+      s.press = true
+    else
+      s.press = false
+    end
+    
+    if btnp(8) and s.on_press then
+      s:on_press()
+    end
+    
+    if btnr(8) and s.on_release then
+      s:on_release()
+    end
+  else
+    s.hover = false
+    s.press = false
+  end
+end
+
+function draw_button(s)
+  local x, y = s.x, s.y
+  local w, h = s.w, s.h
+  local c = s.c
+  
+  if s.hover then
+    h = h + 2
+    w = w + 2
+  end
+  
+  if s.press then
+    y = y + 2
+    h = h - 2
+    w = w - 2
+    c = drk[c]
+  elseif s.hold then
+    y = y + 1
+    if not s.hover then
+      c = drk[c]
+    end
+  elseif s.hover then
+    c = lit[c]
+  end
+  
+  local xa, xb = x - w/2, x + w/2
+  local ya, yb = y - h/2, y + h/2
+  
+  pal(3, c)
+  pal(2, drk[c])
+  pal(4, lit[c])
+  pal(5, lit[lit[c]])
+  
+  sspr(120, 112, 8, 8, xa+8, ya+8, w-16, h-16)
+  
+  sspr(88, 112, 8, 8, xa+8, ya, w-16, 8)
+  sspr(96, 112, 8, 8, xa+8, yb-8, w-16, 8)
+  sspr(104, 112, 8, 8, xa, ya+8, 8, h-16)
+  sspr(112, 112, 8, 8, xb-8, ya+8, 8, h-16)
+  
+  spr(251, xa, ya)
+  spr(252, xb-8, ya)
+  spr(253, xa, yb-8)
+  spr(254, xb-8, yb-8)
+  
+  if s.str then
+    printp(0x0, 0x3120, 0x0, 0x0)
+    printp_color(lit[lit[c]], lit[c], drk[c])
+    pprint(s.str, x - str_px_width(s.str)/2 - 2, y - 9)
+  elseif s.spr then
+    spr(s.spr, x - 8, y - 8, 2, 2)
+  end
+  
+  pal(5,5)
+  pal(4,4)
+  pal(3,3)
+  pal(2,2)
+end
+
+function create_button(info)
+  if IS_SERVER then return end
+
+  info.update = update_button
+  info.draw   = draw_button
+
+  info.regs = {"to_update", "to_draw4", "ui_button"}
+  register_object(info)
+  return info
+end
+
+function remove_all_buttons()
+  eradicate_group("ui_button")
+  
+  if castle then
+    castle.uiupdate = false
+  end
+  
+  ui_defined = false
+end
+
+function define_ui()
+  if IS_SERVER then return end
+
+  if castle then
+    castle.uiupdate = false
+  end
+  
+  local x = screen_w()/2
+  local y = screen_h()/2
+  
+  if game_over then
+    y = y - 16
+  else
+    y = y - 32
+  end
+  
+  create_button({ -- (re)start button
+    x   = x,
+    y   = y,
+    w   = 68,
+    h   = 28,
+    str = game_over and "RESTART" or "READY",
+    c   = 10,
+    on_release = function(s)
+      if not my_id then return end
+      local my_apple = apples[my_id]
+      if not my_apple then return end
+      
+      my_apple.ready = not my_apple.ready
+      s.hold = my_apple.ready
+    end
+  })
+  
+  create_button({ -- post button
+    x   = x - 18,
+    y   = y + 30,
+    w   = 32,
+    h   = 28,
+    spr = 122,
+    c   = 10,
+    on_release = function(s)
+      if not castle then return end
+      
+      
+    end
+  })
+  
+  create_button({ -- settings button
+    x   = x + 18,
+    y   = y + 30,
+    w   = 32,
+    h   = 28,
+    spr = 120,
+    c   = 10,
+    on_release = function(s)
+      if not castle then return end
+      castle.uiupdate = not castle.uiupdate and settings_panel
+    end
+  })
+  
+  ui_defined = true
 end
 
 
@@ -847,6 +1275,8 @@ function new_wave()
   end
 
   level = level + 1
+  
+  log("New wave! Level: "..level)
   
   local w = BOARD_WN*8
   local h = BOARD_HN*8
@@ -871,14 +1301,16 @@ function new_wave()
     create_snake(nil, x, y, len, ca, cb, spd)
   end
   
+  
   --create_snake(nil, w/4+rnd(w/2), h/4+rnd(h/2), 24+irnd(16), ca, cb)
   --create_snake(nil, w/4+rnd(w/2), h/4+rnd(h/2), 24+irnd(16), ca, cb)
 end
 
+local shkp = 100
 function add_shake(p)
   local a = rnd(1)
-  shkx = shkx + p * cos(a)
-  shky = shky + p * sin(a)
+  shkx = shkx + p * cos(a) * shkp/100
+  shky = shky + p * sin(a) * shkp/100
 end
 
 local shkt = 0
@@ -924,6 +1356,39 @@ function del_playerui(s)
   end
 end
 
+function settings_panel()
+  local ui = castle.ui
+  
+--  ui.slider("sfx volume", )
+
+  local oshkp = shkp
+  shkp = ui.slider("screenshake", shkp, 0, 200, {minLabel = "%", maxLabel = "%", step = 1})
+  if shkp ~= oshkp then add_shake(4) end
+  
+  local refresh_shaders = function()
+    if shader_chroma and shader_pixels then
+      screen_shader(shaders.all)
+    elseif shader_chroma then
+      screen_shader(shaders.just_chroma)
+    elseif shader_pixels then
+      screen_shader(shaders.just_pixels)
+    else
+      screen_shader()
+    end
+  end
+  
+  ui.toggle("chroma lines OFF", "chroma lines ON", shader_chroma,
+    { onToggle = function()
+      shader_chroma = not shader_chroma
+      refresh_shaders()
+    end})
+    
+  ui.toggle("super pixels OFF", "super pixels ON", shader_pixels,
+    { onToggle = function()
+      shader_pixels = not shader_pixels
+      refresh_shaders()
+    end})
+end
 
 -- MISC DRAW
 
@@ -977,13 +1442,13 @@ function draw_topbar()
   
   pal(5,10)
   spr(208, 1, 0, 8, 1)
-  spr(216, 1, 7, 8, 1)
+  spr(216, 1, 7, 6, 1)
   pal(5,15)
   spr(208, 3, 0, 8, 1)
-  spr(216, 3, 7, 8, 1)
+  spr(216, 3, 7, 6, 1)
   pal(5,11)
   spr(208, 2, 0, 8, 1)
-  spr(216, 2, 7, 8, 1)
+  spr(216, 2, 7, 6, 1)
   pal(5,5)
   
   palt(0, false)
@@ -1056,9 +1521,32 @@ function draw_playerui()
     
     palmap{1, 2, 3, 4}
     
-    if btnv(6) > x-15 and btnv(7) > y and btnv(7) < y + 16 then
-      printp(0x3300, 0x3130, 0x3230, 0x0330)
+    if not in_game then
+      local str
+      
+      if u.s.ready then
+        str = "ready"
+      end
+      
+      if btnv(6) > x-15 and btnv(7) > y and btnv(7) < y + 16 then
+        if str then
+          str = str..": "..(u.s.username or "Guest")
+        else
+          str = u.s.username or "Guest"
+        end
+      end
+    
+      if str then
+        printp_color(5, plt[2], 0)
+        printp(0x0330, 0x3123, 0x0330, 0x0, 0x0)
+        
+        local w = str_px_width(str)
+        pprint(str, x - 18 - w, y - 2)
+      end
+      
+    elseif btnv(6) > x-15 and btnv(7) > y and btnv(7) < y + 16 then
       printp_color(5, plt[2], 0)
+      printp(0x0330, 0x3123, 0x0330, 0x0, 0x0)
       local str = u.s.username or "Guest"
       local w = str_px_width(str)
       pprint(str, x - 18 - w, y - 2)

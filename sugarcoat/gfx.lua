@@ -520,11 +520,12 @@ end
 
 local function _default_screen_shader()
   _D.shaders.index_to_color = love.graphics.newShader(_D.shader_code.index_to_color)
+  _update_shader_palette()
 end
 
 local function screen_shader(shader_code)
   if not shader_code then
-    _default_shader();
+    _default_screen_shader();
     return
   end
   
@@ -567,10 +568,12 @@ end
 
 local function screen_shader_input(value_table)
   for key, value in pairs(value_table) do
-    if type(value) == "table" then
-      _D.shaders.index_to_color:send(key, unpack(value))
-    else
-      _D.shaders.index_to_color:send(key, value)
+    if _D.shaders.index_to_color:hasUniform(key) then
+      if type(value) == "table" then
+        _D.shaders.index_to_color:send(key, unpack(value))
+      else
+        _D.shaders.index_to_color:send(key, value)
+      end
     end
   end
 end
