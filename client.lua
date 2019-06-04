@@ -140,7 +140,7 @@ function client.load()
 
   screen_shader(shaders.all)
   
-  set_frame_waiting(30)
+--  set_frame_waiting(30)
   
   use_palette(palettes.bubblegum16)
   set_background_color(0)
