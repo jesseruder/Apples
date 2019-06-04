@@ -9,6 +9,6 @@ multiplayer:
   enabled: true
   serverMain: server.lua
 description: |
- Avoid Snakes! Get as far you can through the levels!
+ Avoid Snakes!! Get as far you can through the levels!
  
  Use WASD, arrow keys, controller left-stick, D-pad, and/or mouse click to move around.
