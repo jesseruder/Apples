@@ -1644,7 +1644,7 @@ function draw_playerui()
     local y = y + round(u.y)
     
     local pic = u.s.pic
-    if pic then
+    if pic and surface_exists(pic) then
       palt(12, false)
       spr_sheet(u.s.pic, x, y, 16, 16)
       rect(x, y, x+15, y+15, 0)

@@ -46,6 +46,8 @@ function client_input(diff)
     if timestamp then
       delay = (t() - timestamp) / 2
       connected = true
+      
+      delay = min(delay, 0.5)
     else
       return
     end
