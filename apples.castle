@@ -2,7 +2,7 @@
 main: client.lua
 title: Apples
 owner: trasevol-dog
-primaryColor: ffd100
+primaryColor: bfff3c
 coverImage: thumbnail.png
 dimensions: full
 multiplayer:
