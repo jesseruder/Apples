@@ -1489,9 +1489,9 @@ This game was made by [Trasevol_Dog](https://twitter.com/trasevol_dog), for Cast
 **And thank **you** for playing!** *:D*
 ]])
 end
-if castle then
-  castle.uiupdate = settings_panel
-end
+--if castle then
+--  castle.uiupdate = settings_panel
+--end
 
 function refresh_shaders()
   if shader_chroma and shader_pixels then
@@ -1683,13 +1683,35 @@ end
 
 function load_colors()
 --  body_colors = {}
-  for i = 1,10 do
-    local column = {}
-    for j = 1,3 do
-      column[j] = sget(i-1, 64+j)
-    end
-    body_colors[i] = column
-  end
+--
+--  local str = "{"
+--
+--  for i = 1,10 do
+--    str = str.."{"
+--    local column = {}
+--    for j = 1,3 do
+--      column[j] = sget(i-1, 64+j)
+--      str = str..column[j]..", "
+--    end
+--    body_colors[i] = column
+--    str = str:sub(1, #str-2).."},\n"
+--  end
+--  
+--  write_clipboard(str)
+  
+body_colors = {
+  {1, 2, 3},
+  {2, 3, 4},
+  {3, 4, 5},
+  {9, 8, 7},
+  {8, 7, 6},
+  {7, 6, 5},
+  {14, 13, 12},
+  {13, 12, 5},
+  {15, 10, 11},
+  {10, 11, 5}
+}
+
 end
 
 function define_controls()
