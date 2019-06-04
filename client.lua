@@ -7,8 +7,18 @@ if CASTLE_PREFETCH then
     "anim.lua",
     "sugarcoat/sugarcoat.lua",
     "assets/sheet.png",
---    "assets/jump.wav",
---    "assets/snake.wav"
+    "assets/jump.wav",
+    "assets/snake.wav",
+    "assets/apple_death.wav",
+    "assets/apple_rebirth.wav",
+    "assets/bomb_boom.wav",
+    "assets/bomb_tick.wav",
+    "assets/butt_hover.wav",
+    "assets/butt_press.wav",
+    "assets/butt_release.wav", 
+    "assets/snake_die.wav",
+    "assets/snake_tick.wav",
+    "assets/snake_tick_end.wav"
   })
 end
 

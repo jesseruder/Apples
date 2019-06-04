@@ -77,7 +77,7 @@ local function _load_shaders()
           mod(floor(cb / 100.0), 10.0)
         );
         
-        return vec4(icol/10.0, 1.0);
+        return vec4(icol * 0.1, 1.0);
       }
     ]],
     
@@ -85,7 +85,7 @@ local function _load_shaders()
       varying vec2 v_vTexcoord;
       varying vec4 v_vColour;
       
-      extern int swaps[256];
+      extern float swaps[256];
       extern float trsps[256];
       
       vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
@@ -96,7 +96,7 @@ local function _load_shaders()
         
         float trsp = 1.0-trsps[c];
         
-        float cb = float(swaps[c]);
+        float cb = swaps[c];
         
         vec3 icol = vec3(
           mod(cb, 10.0),
@@ -104,7 +104,7 @@ local function _load_shaders()
           mod(floor(cb / 100.0), 10.0)
         );
         
-        return vec4(icol/10.0, trsp);
+        return vec4(icol * 0.1, trsp);
       }
     ]],
     
@@ -118,17 +118,17 @@ local function _load_shaders()
         return Texel_color(texture, texture_coords);
       }
 	  
-	  int Texel_index(Image texture, vec2 coords)
-	  {
-	    vec4 col = Texel( texture, coords );
-	    int c = int(floor(col.r * 10.0 + 0.5) + floor(col.g * 10.0 + 0.5)*10.0 + floor(col.b * 10.0 + 0.5) * 100.0);
-		
-	    return SWAPS[c];
-	  }
-	  
-	  vec4 Texel_color(Image texture, vec2 coords){
-	    return vec4(PALETTE[ Texel_index(texture, coords) ], 1.0);
-	  }
+	    int Texel_index(Image texture, vec2 coords)
+	    {
+	      vec4 col = Texel( texture, coords );
+	      int c = int(floor(col.r * 10.0 + 0.5) + floor(col.g * 10.0 + 0.5)*10.0 + floor(col.b * 10.0 + 0.5) * 100.0);
+		  
+	      return SWAPS[c];
+	    }
+	    
+	    vec4 Texel_color(Image texture, vec2 coords){
+	      return vec4(PALETTE[ Texel_index(texture, coords) ], 1.0);
+	    }
     ]]
   }
   

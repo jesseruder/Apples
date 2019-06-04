@@ -40,7 +40,7 @@ function anim_step(object, state, t)
  local v=flr(t/info.dt%#info.sprites)
  local k=flr((t/info.dt)/#info.sprites)
  
- return v,(t%info.dt<0.01),k
+ return v,(t%info.dt<dt()),k
 end
 
 function init_anims(info)

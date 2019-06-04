@@ -182,6 +182,7 @@ function client_input(diff)
       apple_resurrect(my_apple)
     end
     level = nlevel
+    sfx("apple_rebirth")
   end
   
   if client.share[6] ~= nil then

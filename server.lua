@@ -11,6 +11,8 @@ require("game")
 function server.load()
   IS_SERVER = true
 
+  sfx = function() end
+  
   init_sugar("Apple!", 128, 128, 3)
   set_frame_waiting(50)
   

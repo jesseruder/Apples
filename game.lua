@@ -8,15 +8,18 @@ require("object")
 --- sfx
 ---- apple bounce  ^
 ---- snake ssss    ^
----- snake dies    .
----- snake dies 2  .
----- apple dies    .
----- apple rebirth .
----- select button .
----- press button  .
----- release button.
+---- snake dies    ^
+---- snake dies tik^
+---- snake ded tick^
+---- apple dies    ^
+---- apple rebirth ^
+---- select button ^
+---- press button  ^
+---- release button^
 ---- bomb beeps    .
 ---- bomb explodes .
+
+--- new game preview + new color?
 
 --- music???
 
@@ -355,6 +358,13 @@ function update_apple(s)
   if abs(s.vx) > 0.1 then
     s.faceleft = s.vx < 0 
   end
+  
+  if s.state == "run" then
+    local a,b,c = anim_step("apple", "run", s.animt)
+    if a == 1 and b then
+      sfx("jump")
+    end
+  end
 end
 
 function apple_die(s, snek)
@@ -362,6 +372,8 @@ function apple_die(s, snek)
   s.name = "dead_apple"
   s.state = "hurt"
   s.animt = 0
+  
+  sfx("apple_death")
   
   if snek then
     local d = dist(snek.x, snek.y, s.x, s.y)
@@ -426,6 +438,9 @@ function update_snake(s)
     
     if n == 0 then
       remove_snake(s)
+      sfx("snake_tick_end")
+    else
+      sfx("snake_tick")
     end
     
     return
@@ -551,6 +566,8 @@ function snake_die(s)
   s.dead = true
   s.animt = 0
   add_shake(8)
+  
+  sfx("snake_die")
 end
 
 function collide_borders(s)
@@ -670,6 +687,10 @@ function update_bomb(s)
     
     s.boom = s.boom - dt()
     
+    if s.boom > 0 and (-s.boom+30) % 0.2 < dt() then
+      sfx("bomb_tick")
+    end
+    
     if s.boom < -0.5 then
       remove_bomb(s)
     elseif s.boom <= 0 and not_boom then
@@ -688,6 +709,8 @@ function update_bomb(s)
         end
         
       else
+        sfx("bomb_boom")
+      
         --kill player apple if close
         local apple = apples[my_id]
         if apple and not apple.dead and dist(s.x, s.y, apple.x, apple.y) < 32 then
@@ -763,7 +786,7 @@ function draw_snake(s)
     aspr(96, s.x, s.y, s.a, 1, 1, 0.5-v, 3.5/8)
     
     if t()%1 < dt() then
-      --sfx("snek")
+      sfx("snek")
     end
   end
   
@@ -1108,6 +1131,10 @@ function update_button(s)
   local mx, my = btnv(6), btnv(7)-16
   
   if mx >= xa and mx <= xb and my >= ya and my <= yb then
+    if not s.hover then
+      sfx("butt_hover")
+    end
+    
     s.hover = true
     if btn(8) then
       s.press = true
@@ -1115,14 +1142,24 @@ function update_button(s)
       s.press = false
     end
     
-    if btnp(8) and s.on_press then
-      s:on_press()
+    if btnp(8) then
+      sfx("butt_press")
+      if s.on_press then
+        s:on_press()
+      end
     end
     
-    if btnr(8) and s.on_release then
-      s:on_release()
+    if btnr(8) then
+      sfx("butt_release")
+      if s.on_release then
+        s:on_release()
+      end
     end
   else
+    if s.hover then
+      sfx("butt_hover")
+    end
+    
     s.hover = false
     s.press = false
   end
@@ -1676,8 +1713,19 @@ end
 function load_assets()
   load_png("spritesheet", "assets/sheet.png", nil, true)
   
---  load_sfx("assets/jump.wav", "jump", 1)
---  load_sfx("assets/snake.wav", "snek", 0.5)
+  load_sfx("assets/jump.wav", "jump", 0.25)
+  load_sfx("assets/snake.wav", "snek", 0.4)
+  
+  load_sfx("assets/apple_death.wav", "apple_death", 0.9)
+  load_sfx("assets/apple_rebirth.wav", "apple_rebirth", 0.9)
+  load_sfx("assets/bomb_boom.wav", "bomb_boom", 1)
+  load_sfx("assets/bomb_tick.wav", "bomb_tick", 0.4)
+  load_sfx("assets/butt_hover.wav", "butt_hover", 0.7)
+  load_sfx("assets/butt_press.wav", "butt_press", 0.9)
+  load_sfx("assets/butt_release.wav", "butt_release", 0.9)
+  load_sfx("assets/snake_die.wav", "snake_die", 1)
+  load_sfx("assets/snake_tick.wav", "snake_tick", 0.7)
+  load_sfx("assets/snake_tick_end.wav", "snake_tick_end", 0.8)
 end
 
 function load_colors()
