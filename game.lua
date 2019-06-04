@@ -5,22 +5,13 @@ require("object")
 
 -- NOTES:
 
---- post with shot of before death, with everyone's names
---- title-screen -> don't start game directly, can let people join first
+--^ broken palette swaps on Mac (custom shaders??????)
 
 
---? difficulty progression
+--- some kind of transitions on ui (screen shake + slide-in)
 
+--- remove ui buttons on post screenshot??
 
---- display countdown
---- trigger game over from server
---- display gameover
---- credits on the gameover
-
---- post screenshot button
-
-
---- anim for apple mouthful going through snek body
 
 --- sfx
 ---- apple bounce  ^
@@ -52,6 +43,11 @@ bomb_t = 1
 in_game = false
 countdown = 60
 game_over = false
+
+opening_ui = false
+closing_ui = false
+anim_ui_t = 0
+anim_ui_y = 0
 
 local body_colors = {}
 local apple_colors = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
@@ -106,6 +102,10 @@ end
 function init_game()
   if IS_SERVER then
     bomb_t = 1
+    
+    for snek in group("snakes") do
+      snake_die(snek)
+    end
   end
   
   in_game = true
@@ -114,7 +114,8 @@ function init_game()
   log("Starting game.")
   
   if not IS_SERVER then
-    remove_all_buttons()
+    --remove_all_buttons()
+    close_ui()
   end
 end
 
@@ -164,6 +165,23 @@ function update_game()
     end
   end
 
+  if opening_ui or closing_ui then
+    anim_ui_t = mid(anim_ui_t + 1.25 * dt() * (opening_ui and 1 or -1), 0, 1)
+    
+    if anim_ui_t == 0 or anim_ui_t == 1 then
+      if closing_ui then
+        remove_all_buttons()
+      end
+    
+      anim_ui_y = opening_ui and 0 or 128
+      opening_ui = false
+      closing_ui = false
+    else
+      local k = 1-cos(cos(anim_ui_t * 0.25 - 0.25) * 0.25 - 0.25)
+      anim_ui_y = 128 * k
+    end
+  end
+  
   update_objects()
   
   if not IS_SERVER then
@@ -420,7 +438,7 @@ function update_snake(s)
   end
 
   s.target_t = s.target_t - dt()
-  if s.target_t < 0 then-- or s.target.dead then
+  if s.target_t < 0 or s.target.dead then
     local md, target = 99999
     for a in group("apples") do
       local nd = sqrdist(a.x - s.x, a.y - s.y)
@@ -504,8 +522,8 @@ function update_snake(s)
   end
   
   if not IS_SERVER then
-    local dx = sgn(s.diffx) * max(abs(s.diffx), 6 * dt())
-    local dy = sgn(s.diffy) * max(abs(s.diffy), 6 * dt())
+    local dx = sgn(s.diffx) * min(abs(s.diffx), 6 * dt())
+    local dy = sgn(s.diffy) * min(abs(s.diffy), 6 * dt())
     
     s.x = s.x + dx
     s.y = s.y + dy
@@ -640,8 +658,8 @@ function update_bomb(s)
     end
     
     if not IS_SERVER then
-      local dx = sgn(s.diffx) * max(abs(s.diffx), 0.2)
-      local dy = sgn(s.diffy) * max(abs(s.diffy), 0.2)
+      local dx = sgn(s.diffx) * min(abs(s.diffx), 0.2)
+      local dy = sgn(s.diffy) * min(abs(s.diffy), 0.2)
       
       s.x = s.x + dx
       s.y = s.y + dy
@@ -1088,8 +1106,10 @@ end
 -- UI BUTTONS
 
 function update_button(s)
-  local xa, xb = s.x - s.w/2, s.x + s.w/2
-  local ya, yb = s.y - s.h/2, s.y + s.h/2
+  local x, y = s.x, s.y + flr(anim_ui_y)
+
+  local xa, xb = x - s.w/2, x + s.w/2
+  local ya, yb = y - s.h/2, y + s.h/2
   
   local mx, my = btnv(6), btnv(7)-16
   
@@ -1115,7 +1135,7 @@ function update_button(s)
 end
 
 function draw_button(s)
-  local x, y = s.x, s.y
+  local x, y = s.x, s.y + flr(anim_ui_y)
   local w, h = s.w, s.h
   local c = s.c
   
@@ -1183,6 +1203,17 @@ function create_button(info)
   return info
 end
 
+function close_ui()
+  closing_ui = true
+  anim_ui_t = 1
+  
+  if castle then
+    castle.uiupdate = false
+  end
+  
+  add_shake(8)
+end
+
 function remove_all_buttons()
   eradicate_group("ui_button")
   
@@ -1215,7 +1246,7 @@ function define_ui()
     w   = 68,
     h   = 28,
     str = game_over and "RESTART" or "READY",
-    c   = 10,
+    c   = 13,
     on_release = function(s)
       if not my_id then return end
       local my_apple = apples[my_id]
@@ -1232,13 +1263,18 @@ function define_ui()
     w   = 32,
     h   = 28,
     spr = 122,
-    c   = 10,
+    c   = 7,
     on_release = function(s)
       if not (castle and castle.post) then return end
       
       local w,h = screen_w() * 3, screen_h() * 3
       local canvas = love.graphics.newCanvas(w, h)
       render_to_canvas(canvas)
+      if game_over then
+        anim_ui_y = 128
+        client.draw()
+        anim_ui_y = 0
+      end
       half_flip()
       render_to_canvas()
       
@@ -1247,7 +1283,8 @@ function define_ui()
       target()
       
       if game_over then
-        if group_size("apples") == 1 then
+        nplayers = group_size("apples")
+        if nplayers == 1 then
           str = "I got to level "..level.."! "..pick{
             "Betcha you can't do better~!",
             "Pretty sick~!",
@@ -1266,13 +1303,18 @@ function define_ui()
             end
           end
           
-          str = str:sub(1, #str-2).." and "..last.."~!"
+          if nplayers == 2 then
+            str = str..last.."~!"
+          else
+            str = str:sub(1, #str-2).." and "..last.."~!"
+          end
         end
       else
         str = "Come join me on Apples! "..pick{
-          "The multiplayer is so fun!",
+          "The multiplayer is super fun!",
           "It's so shiny!",
-          "Let's beat up some sneks!"
+          "Let's beat up some sneks!",
+          "Get your dose of shiny pixels!"
         }
       end
       
@@ -1297,6 +1339,11 @@ function define_ui()
   })
   
   ui_defined = true
+  
+  opening_ui = true
+  anim_ui_t = 0
+  
+  add_shake(8)
 end
 
 
@@ -1393,35 +1440,69 @@ end
 function settings_panel()
   local ui = castle.ui
   
---  ui.slider("sfx volume", )
-
-  local oshkp = shkp
-  shkp = ui.slider("screenshake", shkp, 0, 200, {minLabel = "%", maxLabel = "%", step = 1})
-  if shkp ~= oshkp then add_shake(4) end
-  
-  local refresh_shaders = function()
-    if shader_chroma and shader_pixels then
-      screen_shader(shaders.all)
-    elseif shader_chroma then
-      screen_shader(shaders.just_chroma)
-    elseif shader_pixels then
-      screen_shader(shaders.just_pixels)
-    else
-      screen_shader()
-    end
-  end
-  
-  ui.toggle("chroma lines OFF", "chroma lines ON", shader_chroma,
-    { onToggle = function()
-      shader_chroma = not shader_chroma
-      refresh_shaders()
-    end})
+  ui.markdown("#### Settings:")
+  --ui.section("Settings:", nil, function()
+    local vol = sfx_volume() or 1
+    ui.slider("Sfx Volume", vol*100, 0, 100, {minLabel = "%", maxLabel = "%", step = 1})
     
-  ui.toggle("super pixels OFF", "super pixels ON", shader_pixels,
-    { onToggle = function()
-      shader_pixels = not shader_pixels
-      refresh_shaders()
-    end})
+    local oshkp = shkp
+    shkp = ui.slider("Screenshake", shkp, 0, 200, {minLabel = "%", maxLabel = "%", step = 1})
+    if shkp ~= oshkp then add_shake(4) end
+    
+    ui.toggle("Chroma Lines OFF", "Chroma Lines ON", shader_chroma,
+      { onToggle = function()
+        shader_chroma = not shader_chroma
+        refresh_shaders()
+      end})
+      
+    ui.toggle("Super Pixels OFF", "Super Pixels ON", shader_pixels,
+      { onToggle = function()
+        shader_pixels = not shader_pixels
+        refresh_shaders()
+      end})
+  --end)
+  
+  ui.markdown([[&#160;
+#### Controls:
+* You control an apple.
+* You can push the bombs and activate them if you are still whole.
+* You can move towards the mouse by clicking on the screen.
+* You can move with the arrow keys or with W, A, S, D.
+* You can move with either sticks of a connected controller, or with the D-pad.
+
+#### Goal:
+**Reach the higher level you can by getting rid of the dangerous snakes, by yourself or with other people!** *(share your game session link!)*
+
+Snakes will die from bomb blasts and from getting into walls and other snakes!
+
+#### Credits:
+This game was made by [Trasevol_Dog](https://twitter.com/trasevol_dog), for Castle, using [Sugarcoat](https://github.com/TRASEVOL-DOG/sugarcoat) and [Share.lua](https://github.com/castle-games/share.lua).
+
+**Thank you to the whole Castle team!**
+
+**Thank you to my supporters on [Patreon](https://www.patreon.com/trasevol_dog)!** Here are some:
+
+***Joseph White***, ***Spaceling***, *rotatetranslate, Anne Le Clech, bbsamurai, HJS, Austin East, Meru, Paul Nguyen, Dan Lewis, Dan Rees-Jones, Reza Esmaili, Joel Jorgensen, Marty Kovach, Flo Devaux, Thomas Wright, HERVAN, berkfrei, Tim and Alexandra Swast, Jearl, Johnathan Roatch, Raphael Gaschignard, Eiyeron, Sam Loeschen, Andrew Reitano, amy, Simon Stålhandske, yunowadidis-musik, slono, Max Cahill, hushcoil, Gruber, Pierre B., Sean S. LeBlanc, Andrew Reist, vaporstack, Jakub Wasilewski*
+
+**Special thanks to Elodie and Eliott!**
+
+**And thank **you** for playing!** *:D*
+]])
+end
+if castle then
+  castle.uiupdate = settings_panel
+end
+
+function refresh_shaders()
+  if shader_chroma and shader_pixels then
+    screen_shader(shaders.all)
+  elseif shader_chroma then
+    screen_shader(shaders.just_chroma)
+  elseif shader_pixels then
+    screen_shader(shaders.just_pixels)
+  else
+    screen_shader()
+  end
 end
 
 -- MISC DRAW
@@ -1627,8 +1708,10 @@ function define_controls()
                       input_id("keyboard", "s"),
                       input_id("controller_button", "dpdown")})
   
-  register_btn(4, 0, input_id("controller_axis", "leftx"))
-  register_btn(5, 0, input_id("controller_axis", "lefty"))
+  register_btn(4, 0, {input_id("controller_axis", "leftx"),
+                      input_id("controller_axis", "rightx")})
+  register_btn(5, 0, {input_id("controller_axis", "lefty"),
+                      input_id("controller_axis", "righty")})
   
   register_btn(6, 0, input_id("mouse_position", "x"))
   register_btn(7, 0, input_id("mouse_position", "y"))
