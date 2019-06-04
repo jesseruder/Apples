@@ -1474,7 +1474,10 @@ function settings_panel()
   ui.markdown("#### Settings:")
   --ui.section("Settings:", nil, function()
     local vol = sfx_volume() or 1
-    ui.slider("Sfx Volume", vol*100, 0, 100, {minLabel = "%", maxLabel = "%", step = 1})
+    local new_vol = ui.slider("Sfx Volume", vol*100, 0, 100, {minLabel = "%", maxLabel = "%", step = 1})
+    if new_vol and new_vol/100 ~= vol then
+      sfx_volume(new_vol)
+    end
     
     local oshkp = shkp
     shkp = ui.slider("Screenshake", shkp, 0, 200, {minLabel = "%", maxLabel = "%", step = 1})
