@@ -5,14 +5,6 @@ require("object")
 
 -- NOTES:
 
---^ broken palette swaps on Mac (custom shaders??????)
-
-
---- some kind of transitions on ui (screen shake + slide-in)
-
---- remove ui buttons on post screenshot??
-
-
 --- sfx
 ---- apple bounce  ^
 ---- snake ssss    ^
@@ -23,6 +15,8 @@ require("object")
 ---- select button .
 ---- press button  .
 ---- release button.
+---- bomb beeps    .
+---- bomb explodes .
 
 --- music???
 
@@ -1455,6 +1449,11 @@ function settings_panel()
         refresh_shaders()
       end})
       
+    ui.toggle("Effect Movement OFF", "Effect Movement ON", shader_moves,
+      { onToggle = function()
+        shader_moves = not shader_moves
+      end})
+      
     ui.toggle("Super Pixels OFF", "Super Pixels ON", shader_pixels,
       { onToggle = function()
         shader_pixels = not shader_pixels
@@ -1699,18 +1698,18 @@ function load_colors()
 --  
 --  write_clipboard(str)
   
-body_colors = {
-  {1, 2, 3},
-  {2, 3, 4},
-  {3, 4, 5},
-  {9, 8, 7},
-  {8, 7, 6},
-  {7, 6, 5},
-  {14, 13, 12},
-  {13, 12, 5},
-  {15, 10, 11},
-  {10, 11, 5}
-}
+  body_colors = {
+    {1, 2, 3},
+    {2, 3, 4},
+    {3, 4, 5},
+    {9, 8, 7},
+    {8, 7, 6},
+    {7, 6, 5},
+    {14, 13, 12},
+    {13, 12, 5},
+    {15, 10, 11},
+    {10, 11, 5}
+  }
 
 end
 

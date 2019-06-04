@@ -120,6 +120,7 @@ shaders = {
 
 shader_chroma = true
 shader_pixels = true
+shader_moves = true
 
 function client.load()
   init_sugar("Apple!", 256+32, 160, 3)
@@ -149,6 +150,11 @@ function client.update()
 end
 
 function client.draw()
-  screen_shader_input({time = t()})
+  if shader_moves then
+    screen_shader_input({time = t()})
+  else
+    screen_shader_input({time = 0.12345})
+  end
+  
   _draw()
 end
