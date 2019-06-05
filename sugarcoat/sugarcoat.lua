@@ -106,20 +106,6 @@ love = setmetatable({}, {
   end
 })
 
-if castle then
-  local old_castle = castle
-  castle = setmetatable({}, {
-    __index = old_castle,
-    __newindex = function(t, k, v)
-      if type(v) == "function" or v == nil then
-        old_castle[k] = arrange_call(v)
-      else
-        old_castle[k] = v
-      end
-    end
-  })
-end
-
 local _dont_arrange = {
   getVersion           = true,
   hasDeprecationOutput = true,
@@ -137,6 +123,36 @@ for k,v in pairs(old_love) do
 end
 
 
+local _castle_prev_exist
+if castle then
+  local old_castle = castle
+  castle = setmetatable({}, {
+    __index = old_castle,
+    __newindex = function(t, k, v)
+      if type(v) == "function" or v == nil then
+        if k == "backgroundupdate" then
+          old_castle[k] = arrange_call(v, sugar_step, nil)
+        else
+          old_castle[k] = arrange_call(v)
+        end
+      else
+        old_castle[k] = v
+      end
+    end
+  })
+  
+  local _dont_arrange = {
+
+  }
+  _castle_prev_exist = {}
+  
+  for k,v in pairs(old_castle) do
+    if type(v) == "function" and not _dont_arrange[k] then
+      _castle_prev_exist[k] = v
+    end
+  end
+end
+
 require("sugarcoat/utility")
 require("sugarcoat/debug")
 require("sugarcoat/maths")
@@ -150,6 +166,12 @@ require("sugarcoat/core")
 
 for k,v in pairs(_prev_exist) do
   love[k] = v
+end
+
+if _castle_prev_exist then
+  for k,v in pairs(_castle_prev_exist) do
+    castle[k] = v
+  end
 end
 
 local function quit()

@@ -1515,7 +1515,7 @@ This game was made by [Trasevol_Dog](https://twitter.com/trasevol_dog), for Cast
 
 **Special thanks to Elodie and Eliott!**
 
-**And thank **you** for playing!** *:D*
+**And thank *you* for playing!** *:D*
 ]])
 end
 --if castle then
