@@ -59,12 +59,7 @@ function client_input(diff)
   local apple_data = client.share[2]
   for id, apple in pairs(apples) do
     if not apple_data[id] then
-      deregister_object(apple)
-      apples[id] = nil
-      
-      if apple.pic then
-        delete_surface(apple.pic)
-      end
+      remove_apple(apple)
     end
   end
   
@@ -280,15 +275,7 @@ function server_input(id, diff)
     local pdead = apple.dead
     apple.dead = ho[6]
     if in_game and ho[6] and not pdead then
-      local all_dead = true
-      for a in group("apples") do
-        all_dead = all_dead and a.dead
-      end
-      
-      if all_dead then
-        --game over
-        in_game = false
-      end
+      check_for_gameover()
     end
     
     apple.username = ho[7]
@@ -371,8 +358,23 @@ function server_lost_client(id)
     remove_apple(apple)
     server.share[2][id] = nil
   end
+  
+  check_for_gameover()
 end
 
+function check_for_gameover()
+  if not in_game then return end
+
+  local all_dead = true
+  for a in group("apples") do
+    all_dead = all_dead and a.dead
+  end
+  
+  if all_dead then
+    in_game = false
+    countdown = 999
+  end
+end
 
 
 -- look-up table

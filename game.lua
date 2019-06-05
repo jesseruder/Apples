@@ -3,26 +3,6 @@ require("nnetwork")
 require("anim")
 require("object")
 
--- NOTES:
-
---- sfx
----- apple bounce  ^
----- snake ssss    ^
----- snake dies    ^
----- snake dies tik^
----- snake ded tick^
----- apple dies    ^
----- apple rebirth ^
----- select button ^
----- press button  ^
----- release button^
----- bomb beeps    .
----- bomb explodes .
-
---- new game preview + new color?
-
---- music???
-
 
 BOARD_WN = 32
 BOARD_HN = 18
@@ -257,9 +237,11 @@ end
 -- UPDATES
 
 function update_apple(s)
-  s.animt = s.animt + dt()
+  local dt = min(dt(), 0.2)
+
+  s.animt = s.animt + dt
   
-  local acc = dt() * 15 * 30
+  local acc = dt * 15 * 30
   
   if s.id == my_id then
     local movx, movy = 0,0
@@ -289,11 +271,11 @@ function update_apple(s)
     end
   end
   
-  s.x = s.x + s.vx * dt()
-  s.y = s.y + s.vy * dt()
+  s.x = s.x + s.vx * dt
+  s.y = s.y + s.vy * dt
   
-  s.vx = lerp(s.vx, 0, dt() * 15)
-  s.vy = lerp(s.vy, 0, dt() * 15)
+  s.vx = lerp(s.vx, 0, dt * 15)
+  s.vy = lerp(s.vy, 0, dt * 15)
   
   collide_borders(s)
   
@@ -312,15 +294,15 @@ function update_apple(s)
         local dx = (s.x-p.x)/d
         local dy = (s.y-p.y)/d
         
-        s.vx = lerp(s.vx, 45*dx, 10*dt())
-        s.vy = lerp(s.vy, 45*dy, 10*dt())
+        s.vx = lerp(s.vx, 45*dx, 10*dt)
+        s.vy = lerp(s.vy, 45*dy, 10*dt)
       end
     end
   end
   
   if not IS_SERVER then
-    s.diffx = sgn(s.diffx) * max(abs(s.diffx) - 30 * dt(), 0)
-    s.diffy = sgn(s.diffy) * max(abs(s.diffy) - 30 * dt(), 0)
+    s.diffx = sgn(s.diffx) * max(abs(s.diffx) - 30 * dt, 0)
+    s.diffy = sgn(s.diffy) * max(abs(s.diffy) - 30 * dt, 0)
   end
   
   local col = collide_objgroup(s, "apples")
@@ -330,10 +312,10 @@ function update_apple(s)
     local dx = (s.x-col.x)/d
     local dy = (s.y-col.y)/d
     
-    s.vx = lerp(s.vx, 60*dx, 10*dt())
-    s.vy = lerp(s.vy, 60*dy, 10*dt())
-    col.vx = lerp(s.vx, -60*dx, 10*dt())
-    col.vy = lerp(s.vy, -60*dy, 10*dt())
+    s.vx = lerp(s.vx, 60*dx, 10*dt)
+    s.vy = lerp(s.vy, 60*dy, 10*dt)
+    col.vx = lerp(s.vx, -60*dx, 10*dt)
+    col.vy = lerp(s.vy, -60*dy, 10*dt)
   end
   
   local nstate
@@ -416,7 +398,9 @@ function apple_resurrect(s)
 end
 
 function update_snake(s)
-  s.animt = s.animt + dt()
+  local dt = min(dt(), 0.2)
+
+  s.animt = s.animt + dt
   
   if s.dead then
     local k = flr(s.animt/0.15*6)
@@ -446,7 +430,7 @@ function update_snake(s)
     return
   end
 
-  s.target_t = s.target_t - dt()
+  s.target_t = s.target_t - dt
   if s.target_t < 0 or s.target.dead then
     local md, target = 99999
     for a in group("apples") do
@@ -474,7 +458,7 @@ function update_snake(s)
   if s.steer then
     diff_a = 0.5 * sgn(s.steer)
     
-    s.steer = sgn(s.steer) * (abs(s.steer) - dt())
+    s.steer = sgn(s.steer) * (abs(s.steer) - dt)
     if s.steer <= 0 then
       s.steer = nil
     end
@@ -483,11 +467,11 @@ function update_snake(s)
     diff_a = angle_diff(s.a, target_a)
   end
   
-  s.a = s.a + s.va * dt() * diff_a
+  s.a = s.a + s.va * dt * diff_a
   
   local wave = 0.1 * cos(s.animt/2)
-  s.x = s.x + s.spd * cos(s.a + wave) * dt()
-  s.y = s.y + s.spd * sin(s.a + wave) * dt()
+  s.x = s.x + s.spd * cos(s.a + wave) * dt
+  s.y = s.y + s.spd * sin(s.a + wave) * dt
   
   if not s.steer then
     local dprev = 48
@@ -531,8 +515,8 @@ function update_snake(s)
   end
   
   if not IS_SERVER then
-    local dx = sgn(s.diffx) * min(abs(s.diffx), 6 * dt())
-    local dy = sgn(s.diffy) * min(abs(s.diffy), 6 * dt())
+    local dx = sgn(s.diffx) * min(abs(s.diffx), 6 * dt)
+    local dy = sgn(s.diffy) * min(abs(s.diffy), 6 * dt)
     
     s.x = s.x + dx
     s.y = s.y + dy
@@ -623,14 +607,16 @@ function collide_borders(s)
 end
 
 function update_bomb(s)
+  local dt = min(dt(), 0.2)
+
   if s.boom > 0 then
     local collide = function(o)
       local d = dist(s.x, s.y, o.x, o.y)
       local dx = (s.x - o.x) / d
       local dy = (s.y - o.y) / d
       
-      s.vx = s.vx + dx * 60 * dt()
-      s.vy = s.vy + dy * 60 * dt()
+      s.vx = s.vx + dx * 60 * dt
+      s.vy = s.vy + dy * 60 * dt
       
       if not o.dead then
         s.trigger = true
@@ -649,13 +635,13 @@ function update_bomb(s)
       end
     end
   
-    s.x = s.x + s.vx * dt()
-    s.y = s.y + s.vy * dt()
+    s.x = s.x + s.vx * dt
+    s.y = s.y + s.vy * dt
     
-    s.a = s.a + sgn(s.vx) * dist(s.vx, s.vy) * dt() * 0.05
+    s.a = s.a + sgn(s.vx) * dist(s.vx, s.vy) * dt * 0.05
     
-    s.vx = lerp(s.vx, 0, dt())
-    s.vy = lerp(s.vy, 0, dt())
+    s.vx = lerp(s.vx, 0, dt)
+    s.vy = lerp(s.vy, 0, dt)
     
     local ox,oy = s.x, s.y
     if collide_borders(s) then
@@ -685,9 +671,9 @@ function update_bomb(s)
   if s.trigger then
     local not_boom = (s.boom > 0)
     
-    s.boom = s.boom - dt()
+    s.boom = s.boom - dt
     
-    if s.boom > 0 and (-s.boom+30) % 0.2 < dt() then
+    if s.boom > 0 and (-s.boom+30) % 0.2 < dt then
       sfx("bomb_tick")
     end
     
@@ -1052,6 +1038,10 @@ function remove_apple(s)
   deregister_object(s)
   apples[s.id] = nil
   del_playerui(s)
+  
+  if s.pic then
+    delete_surface(s.pic)
+  end
 end
 
 function remove_snake(s)
@@ -1476,7 +1466,7 @@ function settings_panel()
     local vol = sfx_volume() or 1
     local new_vol = ui.slider("Sfx Volume", vol*100, 0, 100, {minLabel = "%", maxLabel = "%", step = 1})
     if new_vol and new_vol/100 ~= vol then
-      sfx_volume(new_vol)
+      sfx_volume(new_vol/100)
     end
     
     local oshkp = shkp
