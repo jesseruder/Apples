@@ -1,8 +1,8 @@
 ---
 main: client.lua
-title: Apples
+title: Apples 🍎
 owner: trasevol-dog
-primaryColor: bfff3c
+primaryColor: fafdff
 coverImage: thumbnail.png
 dimensions: full
 multiplayer:
