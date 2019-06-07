@@ -23,7 +23,9 @@ if CASTLE_PREFETCH then
 end
 
 require("sugarcoat/sugarcoat")
+local oassert = assert
 sugar.utility.using_package(sugar.S, true)
+assert = oassert
 
 require("nnetwork")
 start_client()

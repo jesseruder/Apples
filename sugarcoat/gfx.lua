@@ -13,37 +13,12 @@ local _flr = math.floor
 
 
 local _index_colors = {}
+local _custom_shader = false
+local _shader_vars = {}
+local _shader_arrays = {}
 
 local function _load_shaders()
   _D.shader_code = {
---    color_to_index = [[
---      varying vec2 v_vTexcoord;
---      varying vec4 v_vColour;
---      
---      extern int pal_size;
---      extern vec3 opal[256];
---      
---      vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
---      {
---        vec4 col = Texel( texture, texture_coords );
---        
---        int c=0;
---        for (int i=0; i<pal_size; i++){
---          c += i * int(max(-2.0-sign(abs(col.r-opal[i].r)-0.05)-sign(abs(col.g-opal[i].g)-0.05)-sign(abs(col.b-opal[i].b)-0.05), 0.0));
---        }
---      
---        float cb = float(c);
---        
---        vec3 icol = vec3(
---          mod(cb, 10.0),
---          mod(floor(cb / 10.0), 10.0),
---          mod(floor(cb / 100.0), 10.0)
---        );
---        
---        return vec4(icol/10.0, 1.0);
---      }
---    ]],
-    
     color_to_index = [[
       varying vec2 v_vTexcoord;
       varying vec4 v_vColour;
@@ -115,20 +90,9 @@ local function _load_shaders()
       
       vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
       {
-        return Texel_color(texture, texture_coords);
+        vec4 col = Texel( texture, texture_coords );
+        return vec4(PALETTE[ SWAPS[int(floor(col.r * 10.0 + 0.5) + floor(col.g * 10.0 + 0.5)*10.0 + floor(col.b * 10.0 + 0.5) * 100.0)] ], 1.0);
       }
-	  
-	    int Texel_index(Image texture, vec2 coords)
-	    {
-	      vec4 col = Texel( texture, coords );
-	      int c = int(floor(col.r * 10.0 + 0.5) + floor(col.g * 10.0 + 0.5)*10.0 + floor(col.b * 10.0 + 0.5) * 100.0);
-		  
-	      return SWAPS[c];
-	    }
-	    
-	    vec4 Texel_color(Image texture, vec2 coords){
-	      return vec4(PALETTE[ Texel_index(texture, coords) ], 1.0);
-	    }
     ]]
   }
   
@@ -141,15 +105,19 @@ local function _load_shaders()
       sugar.debug.r_log("Could not validate '"..name.."' shader: "..message)
     end
   end
+  
+  _custom_shader = false
 end
 
 local function _update_shader_palette()
   local pal = {_D.palette_norm[0], unpack(_D.palette_norm)}
   
   _D.shaders.color_to_index:send("opal", unpack(pal))
-  _D.shaders.index_to_color:send("PALETTE", unpack(pal))
-  
   _D.shaders.color_to_index:send("pal_size", #pal)
+  
+  if (not _custom_shader) or _shader_vars["PALETTE"] then
+    _D.shaders.index_to_color:send("PALETTE", unpack(pal))
+  end
 end
 
 function _D.use_color_index_shader()
@@ -169,8 +137,10 @@ end
 
 function _D.use_index_color_shader()
   local shader = _D.shaders.index_to_color
-
-  shader:send("SWAPS", _D.pltswp_fp[0], unpack(_D.pltswp_fp))
+  
+  if (not _custom_shader) or _shader_vars["SWAPS"] then
+    shader:send("SWAPS", _D.pltswp_fp[0], unpack(_D.pltswp_fp))
+  end
   
   love.graphics.setShader(shader)
 end
@@ -345,7 +315,6 @@ local _prev_win_w = 0
 local _prev_win_h = 0
 local function update_screen_size()
   if not _D.init then return end
-  if _in_resize then return end
 
   local win_w, win_h-- = sugar.gfx.window_size()
   if _render_target then
@@ -476,7 +445,7 @@ local function half_flip()
     _D.reset_shader()
 	
 	if sugar.after_render then
-      love.graphics.setCanvas()
+    love.graphics.setCanvas()
 	  sugar.after_render()
 	end
 
@@ -521,6 +490,9 @@ end
 local function _default_screen_shader()
   _D.shaders.index_to_color = love.graphics.newShader(_D.shader_code.index_to_color)
   _update_shader_palette()
+  
+  _custom_shader = false
+  _shader_vars, _shader_arrays = {}, {}
 end
 
 local function screen_shader(shader_code)
@@ -532,23 +504,18 @@ local function screen_shader(shader_code)
   -- ADD extern vec2 SCREEN_SIZE
   -- + update on resize
   
-  local pre = "extern vec2 SCREEN_SIZE; extern vec3 PALETTE[256]; extern int SWAPS[256]; int Texel_index(Image texture, vec2 coords); vec4 Texel_color(Image texture, vec2 coords); float _____(); "
+  local pre = "extern vec2 SCREEN_SIZE; extern vec3 PALETTE[256]; extern int SWAPS[256]; int Texel_index(Image texture, vec2 coords); vec4 Texel_color(Image texture, vec2 coords); "
   local after = [[
-    int Texel_index(Image texture, vec2 coords)
-	{
-	  vec4 col = Texel( texture, coords );
-	  int c = int(floor(col.r * 10.0 + 0.5) + floor(col.g * 10.0 + 0.5)*10.0 + floor(col.b * 10.0 + 0.5) * 100.0);
-	
-	  return SWAPS[c];
-	}
-	
-	vec4 Texel_color(Image texture, vec2 coords){
-	  return vec4(PALETTE[ Texel_index(texture, coords) ], 1.0);
-	}
-    
-    float _____(){
-      return SCREEN_SIZE.x;
-    }
+    int Texel_index(Image texture, vec2 coords){
+	    vec4 col = Texel( texture, coords );
+	    int c = int(floor(col.r * 10.0 + 0.5) + floor(col.g * 10.0 + 0.5)*10.0 + floor(col.b * 10.0 + 0.5) * 100.0);
+	  
+	    return SWAPS[c];
+	  }
+	  
+	  vec4 Texel_color(Image texture, vec2 coords){
+	    return vec4(PALETTE[ Texel_index(texture, coords) ], 1.0);
+	  }
   ]]
   
   shader_code = pre..shader_code..after
@@ -556,11 +523,25 @@ local function screen_shader(shader_code)
   local status, message = love.graphics.validateShader(true, shader_code)
   if status then
     _D.shaders.index_to_color = love.graphics.newShader(shader_code)
+    
+    _shader_vars, _shader_arrays = {}, {}
+    for var_dec in shader_code:gmatch('extern.-;') do
+      local var = var_dec:match('extern.-%a+.-([%a_]+).-;')
+      local is_array = var_dec:find('%[') ~= nil
+      
+      _shader_vars[var] = true
+      if is_array then
+        _shader_arrays[var] = true
+      end
+    end
+    
     _update_shader_palette()
-    if _D.shaders.index_to_color:hasUniform("SCREEN_SIZE") then
+    if _shader_vars["SCREEN_SIZE"] then
       local w,h = screen_size()
       _D.shaders.index_to_color:send("SCREEN_SIZE", {w, h})
     end
+    
+    _custom_shader = true
   else
     sugar.debug.r_log("Could not validate custom screen shader: "..message)
   end
@@ -568,8 +549,8 @@ end
 
 local function screen_shader_input(value_table)
   for key, value in pairs(value_table) do
-    if _D.shaders.index_to_color:hasUniform(key) then
-      if type(value) == "table" then
+    if _shader_vars[key] then
+      if _shader_arrays[key] then
         _D.shaders.index_to_color:send(key, unpack(value))
       else
         _D.shaders.index_to_color:send(key, value)
